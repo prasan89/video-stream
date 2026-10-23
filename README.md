@@ -9,7 +9,7 @@ An India-first, Vimeo-style video SaaS foundation. Working name only; check trad
 - Docker Compose for local PostgreSQL
 - Architecture, security, API, billing and runbook docs
 - Initial unit/integration test examples
-- GCP/Terraform deployment notes (not a production-ready deployment)
+- Local development setup and test instructions
 
 ## Prerequisites
 - Node.js 22 LTS (or a compatible supported release)
@@ -50,6 +50,10 @@ cd services/api && mvn test
 cd ../../apps/web && npm install && npm test
 ```
 
+## Deployment scope
+
+**Local deployment only.** Run the frontend and backend on your machine, with PostgreSQL in Docker Compose. Do not create cloud resources, run Terraform, deploy to GCP, or enable live payment credentials during this phase. The Terraform folder is reference-only and explicitly deferred.
+
 ## Phase 0 acceptance criteria
 - Both applications start locally.
 - PostgreSQL starts from Compose.
@@ -70,9 +74,8 @@ cd ../../apps/web && npm install && npm test
 ## Important limitations
 This is a starter scaffold, not a finished billing or video-hosting product. Payment, authentication, signed upload, transcoding, playback authorization and production infrastructure must not be considered complete until implemented and security-tested. The current plan endpoint is a small demonstrator; no real payment is taken.
 
-## Budget guardrails
-- Set a GCP budget alert before provisioning cloud resources.
-- Keep Cloud SQL small for beta; review HA and backup needs before production.
-- Do not offer unlimited storage or bandwidth.
-- Do not provision Media CDN until a measured delivery model justifies it.
-- Keep video upload and playback traffic out of the API container.
+## Local development guardrails
+- Use Docker Compose PostgreSQL for local development.
+- Do not provision cloud resources at this stage.
+- Keep credentials and `.env` files out of Git.
+- When video upload is implemented, keep large media transfer out of the API container.
