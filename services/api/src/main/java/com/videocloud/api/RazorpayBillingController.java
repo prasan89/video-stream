@@ -6,6 +6,7 @@ import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
@@ -46,6 +47,7 @@ public class RazorpayBillingController {
   return new CheckoutResponse(id,url,"INCOMPLETE","test");
  }
  @PostMapping(value="/api/v1/webhooks/razorpay",consumes=MediaType.APPLICATION_JSON_VALUE)
+ @Transactional
  public ResponseEntity<Map<String,String>> webhook(@RequestBody byte[] raw,@RequestHeader(value="X-Razorpay-Signature",required=false)String signature,@RequestHeader(value="X-Razorpay-Event-Id",required=false)String eventId){
   if(webhookSecret.isBlank())throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Webhook secret is not configured");
   if(signature==null||!constantTimeEquals(hmac(raw,webhookSecret),signature))throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Invalid webhook signature");
