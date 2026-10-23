@@ -8,6 +8,7 @@ type Video = {
   id: string; title: string; description: string | null; visibility: string;
   status: string; durationSeconds: number | null; createdAt: string;
 };
+type Workspace = { id: string; name: string; slug: string; role: string };
 type Usage = { videoCount: number; storedBytes: number; reservedUploadBytes?: number; storageLimitBytes?: number; availableBytes?: number; videoLimit?: number; planCode?: string; billingMode: string; note?: string };
 type Analytics = { periodDays: number; summary: { plays: number; completions: number; unique_viewers: number; watch_seconds: number }; daily: { day: string; plays: number; unique_viewers: number; watch_seconds: number }[]; videos: { id: string; title: string; plays: number; unique_viewers: number; watch_seconds: number }[]; note: string };
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/v1";
@@ -27,6 +28,8 @@ export default function DashboardPage() {
   const [workspaceName, setWorkspaceName] = useState("My Studio");
   const [auth, setAuth] = useState("");
   const [authReady, setAuthReady] = useState(false);
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
@@ -45,11 +48,12 @@ export default function DashboardPage() {
 
   const headers = useCallback((json = false): HeadersInit => ({
     ...(auth ? { Authorization: `Basic ${auth}` } : {}),
+    ...(workspaceId ? { "X-Workspace-Id": workspaceId } : {}),
     ...(json ? { "Content-Type": "application/json" } : {}),
-  }), [auth]);
+  }), [auth, workspaceId]);
 
   const load = useCallback(async () => {
-    if (!auth) return;
+    if (!auth || !workspaceId) return;
     try {
       const [videoResponse, usageResponse] = await Promise.all([
         fetch(`${API}/videos`, { headers: headers() }),
@@ -68,16 +72,43 @@ export default function DashboardPage() {
       setMessage(error instanceof Error ? error.message : "Could not connect to the local API.");
       setMessageError(true);
     }
-  }, [auth, headers]);
+  }, [auth, headers, workspaceId]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("vc-basic");
     if (saved) setAuth(saved);
     setAuthReady(true);
   }, []);
-  useEffect(() => { if (auth) { sessionStorage.setItem("vc-basic", auth); void load(); } }, [auth, load]);
   useEffect(() => {
-    if (!auth || view !== "analytics") return;
+    if (!auth) { setWorkspaces([]); setWorkspaceId(""); return; }
+    sessionStorage.setItem("vc-basic", auth);
+    let cancelled = false;
+    fetch(`${API}/workspaces`, { headers: { Authorization: `Basic ${auth}` } })
+      .then(async response => {
+        if (!response.ok) throw new Error(`Could not load workspaces (HTTP ${response.status}).`);
+        return await response.json() as Workspace[];
+      })
+      .then(items => {
+        if (cancelled) return;
+        setWorkspaces(items);
+        const saved = localStorage.getItem("vc-workspace-id");
+        const selected = items.find(item => item.id === saved) || (items.length === 1 ? items[0] : null);
+        if (selected) {
+          setWorkspaceId(selected.id);
+          localStorage.setItem("vc-workspace-id", selected.id);
+        } else {
+          setWorkspaceId("");
+          setVideos([]); setUsage(null);
+          setMessage(items.length ? "Select a workspace to view its videos and storage." : "No workspace membership found.");
+          setMessageError(items.length === 0);
+        }
+      })
+      .catch(error => { if (!cancelled) { setMessage(error instanceof Error ? error.message : "Could not load workspaces."); setMessageError(true); } });
+    return () => { cancelled = true; };
+  }, [auth]);
+  useEffect(() => { if (auth && workspaceId) void load(); }, [auth, workspaceId, load]);
+  useEffect(() => {
+    if (!auth || !workspaceId || view !== "analytics") return;
     let cancelled = false;
     fetch(`${API}/analytics`, { headers: headers() }).then(async response => {
       if (!response.ok) throw new Error(`Analytics request failed (HTTP ${response.status}).`);
@@ -85,13 +116,13 @@ export default function DashboardPage() {
     }).then(data => { if (!cancelled) { setAnalytics(data); setAnalyticsError(""); } })
       .catch(error => { if (!cancelled) setAnalyticsError(error instanceof Error ? error.message : "Could not load analytics."); });
     return () => { cancelled = true; };
-  }, [auth, view, headers]);
+  }, [auth, workspaceId, view, headers]);
   // Keep processing status and storage figures current while FFmpeg runs.
   useEffect(() => {
-    if (!auth || !videos.some(video => video.status === "PROCESSING" || video.status === "UPLOADED" || video.status === "QUEUED")) return;
+    if (!auth || !workspaceId || !videos.some(video => video.status === "PROCESSING" || video.status === "UPLOADED" || video.status === "QUEUED")) return;
     const timer = window.setInterval(() => { void load(); }, 4000);
     return () => window.clearInterval(timer);
-  }, [auth, videos, load]);
+  }, [auth, workspaceId, videos, load]);
 
   async function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy) return; setBusy(true); setMessage("");
@@ -104,9 +135,9 @@ export default function DashboardPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message || (response.status === 409 ? "This email already has an account. Please sign in." : `Registration failed (HTTP ${response.status}).`));
       const basic = btoa(`${normalizedEmail}:${password}`);
-      const check = await fetch(`${API}/videos`, { headers: { Authorization: `Basic ${basic}` } });
+      const check = await fetch(`${API}/workspaces`, { headers: { Authorization: `Basic ${basic}` } });
       if (!check.ok) throw new Error("Account created, but sign-in verification failed. Please sign in.");
-      sessionStorage.setItem("vc-basic", basic); setAuth(basic); setVideos(await check.json());
+      sessionStorage.setItem("vc-basic", basic); setAuth(basic); setWorkspaces(await check.json());
       setMessage("Workspace created successfully."); setMessageError(false);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Registration failed."); setMessageError(true); }
     finally { setBusy(false); }
@@ -116,10 +147,10 @@ export default function DashboardPage() {
     event.preventDefault(); if (busy) return; setBusy(true); setMessage("");
     try {
       const basic = btoa(`${email.trim().toLowerCase()}:${password}`);
-      const response = await fetch(`${API}/videos`, { headers: { Authorization: `Basic ${basic}` } });
+      const response = await fetch(`${API}/workspaces`, { headers: { Authorization: `Basic ${basic}` } });
       if (!response.ok) throw new Error(response.status === 401 ? "Email or password is incorrect." : `Sign-in failed (HTTP ${response.status}).`);
-      const list = await response.json(); sessionStorage.setItem("vc-basic", basic);
-      setAuth(basic); setVideos(list); setMessage("Signed in."); setMessageError(false);
+      const items = await response.json() as Workspace[]; sessionStorage.setItem("vc-basic", basic);
+      setAuth(basic); setWorkspaces(items); setMessage(items.length > 1 ? "Signed in. Select a workspace." : "Signed in."); setMessageError(false);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Sign-in failed."); setMessageError(true); }
     finally { setBusy(false); }
   }
@@ -238,7 +269,7 @@ export default function DashboardPage() {
   const storedBytes = usage?.storedBytes ?? 0;
   const storageLimit = 2 * 1024 ** 3;
   const effectiveLimit = usage?.storageLimitBytes ?? storageLimit;
-  const storagePercent = Math.min(100, (storedBytes / Math.max(1,effectiveLimit)) * 100);
+  const storagePercent = Math.min(100, ((storedBytes + (usage?.reservedUploadBytes ?? 0)) / Math.max(1,effectiveLimit)) * 100);
 
   if (!authReady) return <main className="workspace-loading">Loading your workspace…</main>;
 
@@ -283,7 +314,7 @@ export default function DashboardPage() {
         </nav>
         <div className="vc-storage-card">
           <div className="vc-storage-heading"><strong>Storage</strong><span>LOCAL</span></div>
-          <p>{formatBytes(storedBytes)} of {formatBytes(usage?.storageLimitBytes ?? 0)} used</p><div className="vc-progress"><span style={{ width: `${storagePercent}%` }} /></div>
+          <p>{formatBytes(storedBytes + (usage?.reservedUploadBytes ?? 0))} of {formatBytes(usage?.storageLimitBytes ?? 0)} used</p><div className="vc-progress"><span style={{ width: `${storagePercent}%` }} /></div>
           <small>{usage ? "Usage from your original video files" : "Storage usage unavailable"}</small>
           <p className="vc-storage-foot">{usage?.planCode ?? "Plan unavailable"} · {usage?.videoCount ?? videos.length}/{usage?.videoLimit ?? "—"} videos</p>
         </div>
@@ -293,7 +324,7 @@ export default function DashboardPage() {
       <section className="vc-main">
         <header className="vc-topbar">
           <div className="vc-search"><span>⌕</span><input aria-label="Search library" placeholder="Search your library" value={search} onChange={event => setSearch(event.target.value)} /></div>
-          <div className="vc-top-actions"><Link href="/pricing">Plans</Link><button className="vc-primary" onClick={() => { setShowUpload(value => !value); setView("library"); }}>＋ Create / Upload</button><div className="vc-avatar" title="Signed in">VC</div></div>
+          <div className="vc-top-actions">{workspaces.length > 1 && <label className="vc-workspace-picker">Workspace <select aria-label="Active workspace" value={workspaceId} onChange={event => { const id = event.target.value; setWorkspaceId(id); localStorage.setItem("vc-workspace-id", id); setVideos([]); setUsage(null); setAnalytics(null); setShareLinks({}); setMessage("Loading selected workspace…"); setMessageError(false); }}><option value="">Select workspace</option>{workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name} ({workspace.role})</option>)}</select></label>}<Link href="/pricing">Plans</Link><button className="vc-primary" onClick={() => { setShowUpload(value => !value); setView("library"); }}>＋ Create / Upload</button><div className="vc-avatar" title="Signed in">VC</div></div>
         </header>
 
         <div className="vc-quick-actions">
