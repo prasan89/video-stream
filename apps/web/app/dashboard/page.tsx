@@ -1,5 +1,5 @@
-import Link from "next/link";
 "use client";
+import Link from "next/link";
 import { FormEvent,useCallback,useEffect,useState } from "react";
 import VideoPlayer from "./VideoPlayer";
 type Video={id:string;title:string;description:string|null;visibility:string;status:string;durationSeconds:number|null;createdAt:string};
