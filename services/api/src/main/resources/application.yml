@@ -7,6 +7,12 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:local_only_change_me}
   flyway:
     enabled: true
+  servlet:
+    multipart:
+      max-file-size: 2GB
+      max-request-size: 2GB
+server:
+  port: ${SERVER_PORT:8080}
 management:
   endpoints:
     web:
@@ -16,5 +22,7 @@ management:
     health:
       probes:
         enabled: true
-server:
-  port: ${SERVER_PORT:8080}
+videocloud:
+  media-root: ${VIDEO_MEDIA_ROOT:./var/media}
+  ffmpeg-path: ${FFMPEG_PATH:ffmpeg}
+  max-upload-bytes: ${MAX_UPLOAD_BYTES:2147483648}
