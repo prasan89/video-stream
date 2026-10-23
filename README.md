@@ -1,81 +1,37 @@
-# VideoCloud — Phase 0 + Phase 1 starter
+# VideoCloud — local Vimeo-style platform
 
-An India-first, Vimeo-style video SaaS foundation. Working name only; check trademark/domain availability before launch.
-
-## Included
-- Next.js + TypeScript frontend starter
-- Spring Boot + Java 21 API starter
-- PostgreSQL + Flyway initial schema
-- Docker Compose for local PostgreSQL
-- Architecture, security, API, billing and runbook docs
-- Initial unit/integration test examples
-- Local development setup and test instructions
+Local deployment only. No GCP resources, Terraform applies, or production payments are part of this milestone.
 
 ## Prerequisites
-- Node.js 22 LTS (or a compatible supported release)
-- Java 21
-- Maven 3.9+
-- Docker Desktop / Docker Engine
-- Git
+- Java 21, Maven 3.9+, Node.js 22+, Docker
+- FFmpeg installed and available on PATH for video processing
 
-## Local setup
-
-### 1. Start PostgreSQL
+## Start locally
+From repository root, terminal 1:
 ```bash
 docker compose up -d postgres
 ```
-Default local-only credentials are in `compose.yaml`. Never reuse them in production.
-
-### 2. Start Spring Boot API
+Terminal 2:
 ```bash
-cd services/api
-cp .env.example .env
-mvn spring-boot:run
+cd services/api && mvn spring-boot:run
 ```
-The API listens on `http://localhost:8080`; health check: `GET /actuator/health`.
-
-### 3. Start Next.js
-In another terminal:
+Terminal 3:
 ```bash
-cd apps/web
-cp .env.example .env.local
-npm install
-npm run dev
+cd apps/web && cp .env.example .env.local && npm install && npm run dev
 ```
-The UI listens on `http://localhost:3000`.
+Open http://localhost:3000 and visit Dashboard. API health: http://localhost:8080/actuator/health.
 
-### 4. Run tests
+## Video processing
+Install FFmpeg locally. Uploads and HLS outputs are stored under `./var/media`. A background task generates a thumbnail and HLS playlist. This single-node local storage implementation is not designed for public hosting.
+
+## Authentication
+Local MVP uses HTTP Basic and BCrypt-hashed passwords, with CORS restricted to localhost. Use a unique development password of at least 12 characters. Basic authentication is local-only; production requires HTTPS and a reviewed OIDC/session architecture, recovery flow, rate limits and MFA options.
+
+## Checks
 ```bash
 cd services/api && mvn test
-cd ../../apps/web && npm install && npm test
+cd ../../apps/web && npm test && npm run lint && npm run build
 ```
 
-## Deployment scope
-
-**Local deployment only.** Run the frontend and backend on your machine, with PostgreSQL in Docker Compose. Do not create cloud resources, run Terraform, deploy to GCP, or enable live payment credentials during this phase. The Terraform folder is reference-only and explicitly deferred.
-
-## Phase 0 acceptance criteria
-- Both applications start locally.
-- PostgreSQL starts from Compose.
-- Flyway migrations apply cleanly.
-- Health endpoint responds.
-- CI runs backend and frontend checks.
-- No secrets are committed.
-
-## Phase 1 implementation order
-1. Add a managed identity provider or implement authentication with Spring Security.
-2. Add registration/login/refresh/logout and email verification.
-3. Add workspace creation and membership authorization.
-4. Add plans and entitlement evaluation.
-5. Integrate Razorpay checkout and signed, idempotent webhook handling.
-6. Add billing state transition tests and usage endpoint.
-7. Deploy to a private GCP staging environment before accepting real payments.
-
-## Important limitations
-This is a starter scaffold, not a finished billing or video-hosting product. Payment, authentication, signed upload, transcoding, playback authorization and production infrastructure must not be considered complete until implemented and security-tested. The current plan endpoint is a small demonstrator; no real payment is taken.
-
-## Local development guardrails
-- Use Docker Compose PostgreSQL for local development.
-- Do not provision cloud resources at this stage.
-- Keep credentials and `.env` files out of Git.
-- When video upload is implemented, keep large media transfer out of the API container.
+## Remaining gaps
+Resumable uploads, share-token endpoints, embeds, comments/invitations, full analytics, Razorpay checkout/webhooks/invoices, account recovery, production hardening, backup/restore automation and load tests remain incomplete. No payments are collected. See `docs/IMPLEMENTATION_STATUS.md`.
