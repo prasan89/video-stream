@@ -8,6 +8,8 @@
 
 ## Phase 2 — authentication
 - [x] Registration with BCrypt password hashing and OWNER workspace membership
+- [x] Signup UI wired to the registration API with validation, duplicate-account feedback and dashboard redirect
+- [x] Signup verifies newly created credentials against the authenticated video API before storing local Basic credentials
 - [x] Database-backed HTTP Basic authentication for the local API
 - [x] Workspace-derived authorization for video operations
 - [x] Integration test for cross-workspace video isolation
