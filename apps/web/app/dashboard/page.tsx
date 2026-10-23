@@ -1,21 +1,254 @@
 "use client";
+
 import Link from "next/link";
-import { FormEvent,useCallback,useEffect,useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import VideoPlayer from "./VideoPlayer";
-type Video={id:string;title:string;description:string|null;visibility:string;status:string;durationSeconds:number|null;createdAt:string};
-const API=process.env.NEXT_PUBLIC_API_BASE_URL||"http://localhost:8080/api/v1";
-export default function DashboardPage(){
- const[email,setEmail]=useState("");const[password,setPassword]=useState("");const[displayName,setDisplayName]=useState("");const[workspaceName,setWorkspaceName]=useState("My Studio");const[auth,setAuth]=useState("");const[videos,setVideos]=useState<Video[]>([]);const[title,setTitle]=useState("");const[file,setFile]=useState<File|null>(null);const[message,setMessage]=useState("");const[busy,setBusy]=useState(false);const[search,setSearch]=useState("");const[sort,setSort]=useState("newest");const[shareLinks,setShareLinks]=useState<Record<string,string>>({});
- const headers=useCallback((json=false):HeadersInit=>({... (auth?{Authorization:`Basic ${auth}`}:{}),...(json?{"Content-Type":"application/json"}:{})}),[auth]);
- const load=useCallback(async()=>{if(!auth)return;const r=await fetch(`${API}/videos`,{headers:headers()});if(r.ok)setVideos(await r.json());else setMessage(`Could not load videos (${r.status}).`);},[auth,headers]);
- useEffect(()=>{const saved=sessionStorage.getItem("vc-basic");if(saved)setAuth(saved);},[]);useEffect(()=>{if(auth){sessionStorage.setItem("vc-basic",auth);void load();}},[auth,load]);
- async function register(e:FormEvent){e.preventDefault();setBusy(true);setMessage("");try{const r=await fetch(`${API}/auth/register`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password,displayName,workspaceName})});const d=await r.json();if(!r.ok)throw new Error(d.message||"Registration failed");setAuth(btoa(`${email.trim().toLowerCase()}:${password}`));setMessage("Workspace created.");}catch(err){setMessage(err instanceof Error?err.message:"Registration failed");}finally{setBusy(false);}}
- async function login(e:FormEvent){e.preventDefault();setBusy(true);const token=btoa(`${email.trim().toLowerCase()}:${password}`);try{const r=await fetch(`${API}/videos`,{headers:{Authorization:`Basic ${token}`}});if(!r.ok)throw new Error("Login failed. Check email and password.");setAuth(token);setVideos(await r.json());setMessage("Signed in.");}catch(err){setMessage(err instanceof Error?err.message:"Login failed");}finally{setBusy(false);}}
- async function upload(e:FormEvent){e.preventDefault();if(!file||!title.trim())return;setBusy(true);setMessage("Uploading; processing will run in the background.");const body=new FormData();body.append("file",file);body.append("title",title);try{const r=await fetch(`${API}/videos`,{method:"POST",headers:headers(),body});const d=await r.json();if(!r.ok)throw new Error(d.message||"Upload failed");setMessage("Upload accepted. Refresh to check status.");setTitle("");setFile(null);await load();}catch(err){setMessage(err instanceof Error?err.message:"Upload failed");}finally{setBusy(false);}}
- async function changeVisibility(v:Video,visibility:string){const r=await fetch(`${API}/videos/${v.id}`,{method:"PATCH",headers:headers(true),body:JSON.stringify({title:v.title,description:v.description||"",visibility})});if(r.ok)await load();else setMessage("Could not update video.");}
- async function remove(v:Video){if(!confirm(`Delete “${v.title}” and its local media?`))return;const r=await fetch(`${API}/videos/${v.id}`,{method:"DELETE",headers:headers()});if(r.ok)await load();else setMessage("Delete failed.");}
- async function createShare(v:Video){try{const r=await fetch(`${API}/videos/${v.id}/shares`,{method:"POST",headers:headers()});const data=await r.json();if(!r.ok)throw new Error(data.message||"Could not create share link");const url=`${window.location.origin}/share/${data.token}`;setShareLinks(old=>({...old,[v.id]:url}));await navigator.clipboard?.writeText(url);setMessage("Share link created and copied when clipboard access was available.");}catch(e){setMessage(e instanceof Error?e.message:"Share link failed");}}
- const filteredVideos=videos.filter(v=>v.title.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>sort==="title"?a.title.localeCompare(b.title):sort==="oldest"?a.createdAt.localeCompare(b.createdAt):b.createdAt.localeCompare(a.createdAt));
- if(!auth)return <main className="shell subPage"><Link className="brand" href="/">VideoCloud<span>●</span></Link><section className="signupCard"><p className="eyebrow">LOCAL CREATOR STUDIO</p><h1>Sign in or create a workspace</h1><p className="heroCopy">Local MVP uses HTTP Basic. Use a unique development password of at least 12 characters.</p><form onSubmit={login}><label htmlFor="email">Email</label><input id="email" type="email" required value={email} onChange={e=>setEmail(e.target.value)}/><label htmlFor="password">Password</label><input id="password" type="password" required value={password} onChange={e=>setPassword(e.target.value)}/><button className="button" disabled={busy}>Sign in</button></form><hr/><form onSubmit={register}><label htmlFor="display">Display name</label><input id="display" required value={displayName} onChange={e=>setDisplayName(e.target.value)}/><label htmlFor="workspace">Workspace name</label><input id="workspace" required value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)}/><button className="button" disabled={busy}>Create account</button></form>{message&&<p role="status">{message}</p>}</section></main>;
- return <main className="shell subPage"><nav className="nav"><Link className="brand" href="/">VideoCloud<span>●</span></Link><div className="navLinks"><Link href="/billing">Billing</Link><Link href="/pricing">Plans</Link><button className="button buttonSmall" onClick={()=>{sessionStorage.removeItem("vc-basic");setAuth("");setVideos([]);}}>Sign out</button></div></nav><section className="features"><p className="eyebrow">YOUR WORKSPACE</p><h1>Video library</h1><p className="heroCopy">Upload MP4, MOV, WebM or MKV. Install FFmpeg for HLS processing.</p><form className="signupCard" onSubmit={upload}><label htmlFor="title">Video title</label><input id="title" value={title} onChange={e=>setTitle(e.target.value)} required maxLength={250}/><label htmlFor="video">Video file</label><input id="video" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska" onChange={e=>setFile(e.target.files?.[0]||null)} required/><button className="button" disabled={busy||!file}>{busy?"Working…":"Upload video"}</button></form>{message&&<p role="status">{message}</p>}<div className="signupCard"><label htmlFor="video-search">Search videos</label><input id="video-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Filter by title"/><label htmlFor="video-sort">Sort by</label><select id="video-sort" value={sort} onChange={e=>setSort(e.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="title">Title A–Z</option></select></div><div className="featureGrid">{filteredVideos.map(v=><article className="feature" key={v.id}><h3>{v.title}</h3><p>Status: <strong>{v.status}</strong></p><p>Visibility: {v.visibility}</p>{v.status==="READY"&&<VideoPlayer videoId={v.id} auth={auth}/>}<label htmlFor={`visibility-${v.id}`}>Visibility</label><select id={`visibility-${v.id}`} value={v.visibility} onChange={e=>void changeVisibility(v,e.target.value)}><option>PRIVATE</option><option>UNLISTED</option><option>PUBLIC</option></select><button className="button" onClick={()=>void createShare(v)}>Create share link</button>{shareLinks[v.id]&&<p><Link href={shareLinks[v.id]}>Open share page</Link></p>}<button className="button" onClick={()=>void remove(v)}>Delete</button></article>)}</div><button className="button" onClick={()=>void load()}>Refresh status</button></section></main>;
+
+type Video = {
+  id: string; title: string; description: string | null; visibility: string;
+  status: string; durationSeconds: number | null; createdAt: string;
+};
+type Usage = { videoCount: number; storedBytes: number; billingMode: string; note?: string };
+const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/v1";
+const formatBytes = (bytes: number) => {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** index).toFixed(index > 1 ? 1 : 0)} ${units[index]}`;
+};
+
+function Brand() { return <Link className="brand" href="/">VideoCloud<span>●</span></Link>; }
+
+export default function DashboardPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("My Studio");
+  const [auth, setAuth] = useState("");
+  const [authReady, setAuthReady] = useState(false);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [title, setTitle] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [message, setMessage] = useState("");
+  const [messageError, setMessageError] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("newest");
+  const [view, setView] = useState<"library" | "analytics">("library");
+  const [shareLinks, setShareLinks] = useState<Record<string, string>>({});
+
+  const headers = useCallback((json = false): HeadersInit => ({
+    ...(auth ? { Authorization: `Basic ${auth}` } : {}),
+    ...(json ? { "Content-Type": "application/json" } : {}),
+  }), [auth]);
+
+  const load = useCallback(async () => {
+    if (!auth) return;
+    try {
+      const [videoResponse, usageResponse] = await Promise.all([
+        fetch(`${API}/videos`, { headers: headers() }),
+        fetch(`${API}/usage`, { headers: headers() }),
+      ]);
+      if (videoResponse.status === 401 || videoResponse.status === 403) {
+        sessionStorage.removeItem("vc-basic"); setAuth(""); setVideos([]);
+        setMessage("Your session is no longer valid. Please sign in again."); setMessageError(true); return;
+      }
+      if (!videoResponse.ok) throw new Error(`Could not load your library (HTTP ${videoResponse.status}).`);
+      setVideos(await videoResponse.json());
+      if (usageResponse.ok) setUsage(await usageResponse.json());
+      else setUsage(null);
+      setMessageError(false);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not connect to the local API.");
+      setMessageError(true);
+    }
+  }, [auth, headers]);
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem("vc-basic");
+    if (saved) setAuth(saved);
+    setAuthReady(true);
+  }, []);
+  useEffect(() => { if (auth) { sessionStorage.setItem("vc-basic", auth); void load(); } }, [auth, load]);
+
+  async function register(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (busy) return; setBusy(true); setMessage("");
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const response = await fetch(`${API}/auth/register`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail, password, displayName: displayName.trim(), workspaceName: workspaceName.trim() }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || (response.status === 409 ? "This email already has an account. Please sign in." : `Registration failed (HTTP ${response.status}).`));
+      const basic = btoa(`${normalizedEmail}:${password}`);
+      const check = await fetch(`${API}/videos`, { headers: { Authorization: `Basic ${basic}` } });
+      if (!check.ok) throw new Error("Account created, but sign-in verification failed. Please sign in.");
+      sessionStorage.setItem("vc-basic", basic); setAuth(basic); setVideos(await check.json());
+      setMessage("Workspace created successfully."); setMessageError(false);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Registration failed."); setMessageError(true); }
+    finally { setBusy(false); }
+  }
+
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (busy) return; setBusy(true); setMessage("");
+    try {
+      const basic = btoa(`${email.trim().toLowerCase()}:${password}`);
+      const response = await fetch(`${API}/videos`, { headers: { Authorization: `Basic ${basic}` } });
+      if (!response.ok) throw new Error(response.status === 401 ? "Email or password is incorrect." : `Sign-in failed (HTTP ${response.status}).`);
+      const list = await response.json(); sessionStorage.setItem("vc-basic", basic);
+      setAuth(basic); setVideos(list); setMessage("Signed in."); setMessageError(false);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Sign-in failed."); setMessageError(true); }
+    finally { setBusy(false); }
+  }
+
+  async function upload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!file || !title.trim() || busy) return;
+    setBusy(true); setMessage("Uploading video… processing will continue in the background."); setMessageError(false);
+    const body = new FormData(); body.append("file", file); body.append("title", title.trim());
+    try {
+      const response = await fetch(`${API}/videos`, { method: "POST", headers: headers(), body });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || `Upload failed (HTTP ${response.status}).`);
+      setMessage("Upload accepted. Video processing has started."); setTitle(""); setFile(null); setShowUpload(false);
+      await load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Upload failed."); setMessageError(true); }
+    finally { setBusy(false); }
+  }
+
+  async function changeVisibility(video: Video, visibility: string) {
+    try {
+      const response = await fetch(`${API}/videos/${video.id}`, { method: "PATCH", headers: headers(true), body: JSON.stringify({ title: video.title, description: video.description || "", visibility }) });
+      if (!response.ok) throw new Error(`Could not update visibility (HTTP ${response.status}).`);
+      await load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not update video."); setMessageError(true); }
+  }
+
+  async function remove(video: Video) {
+    if (!window.confirm(`Delete “${video.title}” and its local media?`)) return;
+    try {
+      const response = await fetch(`${API}/videos/${video.id}`, { method: "DELETE", headers: headers() });
+      if (!response.ok) throw new Error(`Delete failed (HTTP ${response.status}).`);
+      setMessage("Video deleted."); setMessageError(false); await load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Delete failed."); setMessageError(true); }
+  }
+
+  async function createShare(video: Video) {
+    try {
+      const response = await fetch(`${API}/videos/${video.id}/shares`, { method: "POST", headers: headers() });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Could not create share link.");
+      const url = `${window.location.origin}/share/${data.token}`;
+      setShareLinks(previous => ({ ...previous, [video.id]: url }));
+      try { await navigator.clipboard.writeText(url); setMessage("Share link created and copied."); }
+      catch { setMessage("Share link created. Copy the link shown on the video card."); }
+      setMessageError(false);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Share link failed."); setMessageError(true); }
+  }
+
+  const filteredVideos = useMemo(() => videos.filter(video => video.title.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => sort === "title" ? a.title.localeCompare(b.title) : sort === "oldest" ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt)), [videos, search, sort]);
+  const storedBytes = usage?.storedBytes ?? 0;
+  const storageLimit = 2 * 1024 ** 3;
+  const storagePercent = Math.min(100, (storedBytes / storageLimit) * 100);
+
+  if (!authReady) return <main className="workspace-loading">Loading your workspace…</main>;
+
+  if (!auth) return (
+    <main className="auth-screen">
+      <header className="auth-header"><Brand /><Link href="/">Back to homepage</Link></header>
+      <section className="auth-card">
+        <p className="eyebrow">YOUR CREATOR WORKSPACE</p><h1>Welcome to VideoCloud</h1>
+        <p className="heroCopy">Sign in or create a workspace to manage your video library.</p>
+        <form onSubmit={login} className="workspace-form">
+          <h2>Sign in</h2><label htmlFor="login-email">Work email</label>
+          <input id="login-email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required />
+          <label htmlFor="login-password">Password</label>
+          <input id="login-password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required />
+          <button className="vc-primary" disabled={busy}>{busy ? "Please wait…" : "Sign in"}</button>
+        </form>
+        <details className="create-account"><summary>Create a new account</summary>
+          <form onSubmit={register} className="workspace-form">
+            <label htmlFor="signup-name">Your name</label><input id="signup-name" value={displayName} onChange={event => setDisplayName(event.target.value)} minLength={2} required />
+            <label htmlFor="signup-workspace">Workspace name</label><input id="signup-workspace" value={workspaceName} onChange={event => setWorkspaceName(event.target.value)} minLength={2} required />
+            <label htmlFor="signup-email">Work email</label><input id="signup-email" type="email" value={email} onChange={event => setEmail(event.target.value)} required />
+            <label htmlFor="signup-password">Password (at least 12 characters)</label><input id="signup-password" type="password" minLength={12} maxLength={72} autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} required />
+            <button className="vc-primary" disabled={busy}>{busy ? "Creating…" : "Create workspace"}</button>
+          </form>
+        </details>
+        {message && <p className={messageError ? "vc-alert" : "vc-notice"} role={messageError ? "alert" : "status"}>{message}</p>}
+        <p className="vc-disclaimer">Local development authentication only. Do not expose this build publicly.</p>
+      </section>
+    </main>
+  );
+
+  return (
+    <main className="vc-app">
+      <aside className="vc-sidebar">
+        <Brand />
+        <nav className="vc-side-nav" aria-label="Main navigation">
+          <button className={view === "library" ? "vc-side-link active" : "vc-side-link"} onClick={() => setView("library")}>⌂ <span>Home</span></button>
+          <button className="vc-side-link" onClick={() => { setSearch(""); setView("library"); }}>▷ <span>Watch / Library</span></button>
+          <button className={view === "analytics" ? "vc-side-link active" : "vc-side-link"} onClick={() => setView("analytics")}>▥ <span>Analytics</span></button>
+          <Link className="vc-side-link" href="/billing">◇ <span>Plans & billing</span></Link>
+          <Link className="vc-side-link" href="/pricing">＋ <span>Pricing</span></Link>
+        </nav>
+        <div className="vc-storage-card">
+          <div className="vc-storage-heading"><strong>Storage</strong><span>LOCAL</span></div>
+          <p>{formatBytes(storedBytes)} used</p><div className="vc-progress"><span style={{ width: `${storagePercent}%` }} /></div>
+          <small>{usage ? "Usage from your original video files" : "Storage usage unavailable"}</small>
+          <p className="vc-storage-foot">Storage allowance is not yet enforced.</p>
+        </div>
+        <button className="vc-side-link vc-logout" onClick={() => { sessionStorage.removeItem("vc-basic"); setAuth(""); setVideos([]); setUsage(null); }}>↪ <span>Sign out</span></button>
+      </aside>
+
+      <section className="vc-main">
+        <header className="vc-topbar">
+          <div className="vc-search"><span>⌕</span><input aria-label="Search library" placeholder="Search your library" value={search} onChange={event => setSearch(event.target.value)} /></div>
+          <div className="vc-top-actions"><Link href="/pricing">Plans</Link><button className="vc-primary" onClick={() => { setShowUpload(value => !value); setView("library"); }}>＋ Create / Upload</button><div className="vc-avatar" title="Signed in">VC</div></div>
+        </header>
+
+        <div className="vc-quick-actions">
+          <button className="vc-quick-card" onClick={() => { setShowUpload(true); setView("library"); }}><span className="vc-quick-icon">⇧</span><span><strong>Upload</strong><small>From your computer</small></span></button>
+          <button className="vc-quick-card" onClick={() => { setShowUpload(true); setView("library"); }}><span className="vc-quick-icon">▣</span><span><strong>Add to library</strong><small>Upload a video file</small></span></button>
+          <button className="vc-quick-card" onClick={() => { setShowUpload(true); setView("library"); }}><span className="vc-quick-icon">✎</span><span><strong>Create</strong><small>Start with a video upload</small></span></button>
+          <button className="vc-quick-card" disabled title="Screen/webcam recording is not implemented yet"><span className="vc-quick-icon">◉</span><span><strong>Record</strong><small>Coming in a later phase</small></span></button>
+          <button className="vc-quick-card" disabled title="Live events are not implemented yet"><span className="vc-quick-icon">▻</span><span><strong>Host</strong><small>Live events later</small></span></button>
+        </div>
+
+        {message && <p className={messageError ? "vc-alert vc-message" : "vc-notice vc-message"} role={messageError ? "alert" : "status"}>{message}</p>}
+
+        {showUpload && view === "library" && <section className="vc-upload-panel">
+          <div><p className="eyebrow">ADD TO YOUR LIBRARY</p><h2>Upload a video</h2><p>Choose a video file. FFmpeg will prepare it for HLS playback in the background.</p></div>
+          <form onSubmit={upload} className="vc-upload-form">
+            <label htmlFor="video-title">Video title</label><input id="video-title" value={title} onChange={event => setTitle(event.target.value)} maxLength={250} required />
+            <label htmlFor="video-file">Video file</label><input id="video-file" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska" onChange={event => setFile(event.target.files?.[0] || null)} required />
+            {file && <p className="vc-file-selected">{file.name} · {formatBytes(file.size)}</p>}
+            <div className="vc-upload-actions"><button type="button" className="vc-secondary" onClick={() => setShowUpload(false)}>Cancel</button><button className="vc-primary" disabled={busy || !file}>{busy ? "Uploading…" : "Upload video"}</button></div>
+          </form>
+        </section>}
+
+        {view === "analytics" ? <section className="vc-section">
+          <p className="eyebrow">WORKSPACE INSIGHTS</p><h1>Analytics</h1>
+          <div className="vc-metric-grid"><article className="vc-metric"><span>Videos in library</span><strong>{usage?.videoCount ?? videos.length}</strong></article><article className="vc-metric"><span>Original storage used</span><strong>{formatBytes(storedBytes)}</strong></article><article className="vc-metric"><span>Video views</span><strong>—</strong><small>Playback analytics are not implemented yet</small></article></div>
+          <div className="vc-empty-note"><strong>Playback analytics coming next</strong><p>View counts, unique viewers, watch time and referrers are not collected yet, so this page intentionally does not invent metrics.</p></div>
+        </section> : <section className="vc-section">
+          <div className="vc-section-heading"><div><p className="eyebrow">YOUR CONTENT</p><h1>Video library</h1><p className="vc-subtitle">Manage, preview and share videos from your workspace.</p></div><div className="vc-library-controls"><select aria-label="Sort videos" value={sort} onChange={event => setSort(event.target.value)}><option value="newest">Recently added</option><option value="oldest">Oldest first</option><option value="title">Title A–Z</option></select><button className="vc-secondary" onClick={() => void load()}>↻ Refresh</button></div></div>
+          <div className="vc-library-summary"><span>{filteredVideos.length} {filteredVideos.length === 1 ? "video" : "videos"}</span><span>{formatBytes(storedBytes)} stored</span></div>
+          {filteredVideos.length === 0 ? <div className="vc-empty-state"><div className="vc-empty-icon">⇧</div><h2>{search ? "No matching videos" : "Your video library starts here"}</h2><p>{search ? "Try another search term." : "Upload your first video to start building a branded, shareable library."}</p>{!search && <button className="vc-primary" onClick={() => setShowUpload(true)}>＋ Upload your first video</button>}</div> :
+            <div className="vc-video-grid">{filteredVideos.map(video => <article className="vc-video-card" key={video.id}>
+              <div className="vc-video-preview">{video.status === "READY" ? <VideoPlayer videoId={video.id} auth={auth} /> : <div className="vc-processing"><span>{video.status === "FAILED" ? "!" : "◷"}</span><strong>{video.status === "FAILED" ? "Processing failed" : "Preparing your video"}</strong><small>{video.status}</small></div>}</div>
+              <div className="vc-video-details"><div className="vc-video-title-row"><h2 title={video.title}>{video.title}</h2><span className={video.status === "READY" ? "vc-status ready" : video.status === "FAILED" ? "vc-status failed" : "vc-status"}>{video.status}</span></div>
+                <p className="vc-video-meta">{new Date(video.createdAt).toLocaleDateString()} · {video.visibility}</p>
+                <div className="vc-video-actions"><label className="vc-visibility-label" htmlFor={`visibility-${video.id}`}>Access</label><select id={`visibility-${video.id}`} value={video.visibility} onChange={event => void changeVisibility(video, event.target.value)}><option>PRIVATE</option><option>UNLISTED</option><option>PUBLIC</option></select><button className="vc-icon-button" title="Create share link" onClick={() => void createShare(video)}>↗ Share</button><button className="vc-icon-button danger" title="Delete video" onClick={() => void remove(video)}>⌫</button></div>
+                {shareLinks[video.id] && <div className="vc-share-url"><input aria-label="Share URL" readOnly value={shareLinks[video.id]} onFocus={event => event.currentTarget.select()} /><button onClick={() => void navigator.clipboard?.writeText(shareLinks[video.id])}>Copy</button><Link href={shareLinks[video.id]}>Open</Link></div>}
+              </div>
+            </article>)}</div>}
+        </section>}
+        <footer className="vc-footer"><Brand /><span>Local MVP · Storage usage reflects original files only · Payments and analytics are not enabled</span></footer>
+      </section>
+    </main>
+  );
 }
