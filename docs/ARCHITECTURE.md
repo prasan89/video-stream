@@ -1,16 +1,12 @@
 # Architecture
 
-## Runtime
-- `apps/web`: Next.js App Router, TypeScript, responsive SaaS UI.
-- `services/api`: Spring Boot modular monolith, REST `/api/v1`, Bean Validation, Spring Security.
-- PostgreSQL: transactional metadata and billing state.
-- GCP Cloud Run: stateless web/API containers.
-- Cloud SQL: managed PostgreSQL.
-- Cloud Storage: private original and output media buckets.
-- Transcoder API: asynchronous HLS renditions and thumbnails.
-- Cloud Tasks/Pub/Sub: retryable async workflows when needed.
-- Secret Manager: provider keys and database secrets.
-- Cloud Monitoring/Logging: metrics, logs and alerts.
+## Current runtime (local only)
+- `apps/web`: Next.js App Router and TypeScript, run with `npm run dev`.
+- `services/api`: Spring Boot modular monolith, run with `mvn spring-boot:run`.
+- PostgreSQL: local Docker Compose container with Flyway migrations.
+
+## Deferred cloud target (documentation only; do not provision)
+Future versions may evaluate Cloud Run, Cloud SQL, Cloud Storage, Transcoder API, Cloud Tasks/Pub/Sub, Secret Manager, monitoring and CDN after the local MVP works and costs are validated.
 
 ## Data flow: future video upload
 1. Client asks API to create a video and upload session.
