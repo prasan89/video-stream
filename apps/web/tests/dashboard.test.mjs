@@ -15,7 +15,7 @@ test("workspace storage display uses real usage API values without invented anal
   const source = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
   assert.match(source, /storedBytes/);
   assert.match(source, /Storage usage unavailable/);
-  assert.match(source, /Playback analytics are not implemented yet/);
+  assert.match(source, /Playback starts/);\n  assert.match(source, /Unique viewer sessions/);\n  assert.match(source, /Top videos/);
   assert.match(source, /Storage allowance is not yet enforced/);
 });
 
@@ -44,4 +44,20 @@ test("processing videos trigger periodic refreshes for status and storage", asyn
   const source = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
   assert.match(source, /setInterval\(\(\) => \{ void load\(\); \}, 4000\)/);
   assert.match(source, /video\.status === "PROCESSING"/);
+});
+
+test("analytics view loads real playback metrics and renders a daily chart", async () => {
+  const source = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /fetch\(\`\$\{API\}\/analytics/);
+  assert.match(source, /analytics\.daily\.map/);
+  assert.match(source, /analytics\.videos\.map/);
+  assert.match(source, /analytics\.summary\.watch_seconds/);
+});
+
+test("video player sends playback events to the authenticated analytics API", async () => {
+  const source = await readFile(new URL("../app/dashboard/VideoPlayer.tsx", import.meta.url), "utf8");
+  assert.match(source, /\/analytics\/videos\/\$\{videoId\}\/events/);
+  assert.match(source, /sendEvent\("PLAY"\)/);
+  assert.match(source, /sendEvent\("COMPLETE"\)/);
+  assert.match(source, /watchedSeconds/);
 });
