@@ -110,3 +110,20 @@
 .workspace-loading{padding:70px;text-align:center;color:#6c7681}
 @media(max-width:1250px){.vc-app{grid-template-columns:215px minmax(0,1fr)}.vc-main{padding:0 22px 20px}.vc-quick-actions{grid-template-columns:repeat(3,minmax(0,1fr))}.vc-video-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:800px){.vc-app{grid-template-columns:1fr}.vc-sidebar{height:auto;position:static;padding:14px;gap:13px;border-right:0;border-bottom:1px solid #e6e9ee}.vc-sidebar .brand{padding:0 4px}.vc-side-nav{flex-direction:row;overflow-x:auto}.vc-side-link{width:auto;white-space:nowrap;padding:10px}.vc-storage-card{display:none}.vc-logout{align-self:flex-start}.vc-main{padding:0 14px 18px}.vc-topbar{height:auto;min-height:72px;flex-wrap:wrap;padding:13px 0}.vc-search{width:100%;max-width:none}.vc-top-actions{width:100%;justify-content:space-between}.vc-quick-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.vc-quick-card{padding:11px 9px}.vc-quick-icon{flex-basis:32px;width:32px;height:32px}.vc-section-heading{align-items:flex-start;flex-direction:column}.vc-video-grid,.vc-metric-grid{grid-template-columns:1fr}.vc-upload-panel{grid-template-columns:1fr}.vc-footer{align-items:flex-start;flex-direction:column}.vc-section h1{font-size:30px}}
+
+
+/* Dashboard polish: keep navigation labels compact and sidebar controls visible. */
+.vc-sidebar{width:248px;overflow:hidden}
+.vc-side-nav{width:100%;min-width:0}
+.vc-side-link{min-width:0;white-space:nowrap;overflow:hidden;font-size:13px;line-height:1.25;padding:12px 11px;gap:11px}
+.vc-side-link .vc-nav-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 23px;width:23px;font-size:18px;line-height:1}
+.vc-side-link .vc-nav-label{display:block;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;font-weight:650}
+.vc-logout{margin-top:8px;flex-shrink:0}
+.vc-storage-card{flex-shrink:0}
+.vc-main{min-width:0}
+.vc-video-preview .vc-processing{min-height:0;height:100%;aspect-ratio:16/9}
+.vc-upload-form input[type=file]{max-width:100%;font-size:12px}
+.vc-upload-form input[type=text]{width:100%}
+.vc-alert,.vc-notice{overflow-wrap:anywhere}
+@media(max-height:720px) and (min-width:801px){.vc-sidebar{height:100vh;overflow-y:auto;gap:18px}.vc-storage-card{margin-top:12px}.vc-logout{margin-top:auto}}
+@media(max-width:800px){.vc-sidebar{width:100%;overflow:visible}.vc-side-link{flex:0 0 auto}.vc-side-link .vc-nav-label{white-space:nowrap}.vc-logout{align-self:flex-start}}

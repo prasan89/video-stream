@@ -72,6 +72,12 @@ export default function DashboardPage() {
     setAuthReady(true);
   }, []);
   useEffect(() => { if (auth) { sessionStorage.setItem("vc-basic", auth); void load(); } }, [auth, load]);
+  // Keep processing status and storage figures current while FFmpeg runs.
+  useEffect(() => {
+    if (!auth || !videos.some(video => video.status === "PROCESSING" || video.status === "UPLOADED" || video.status === "QUEUED")) return;
+    const timer = window.setInterval(() => { void load(); }, 4000);
+    return () => window.clearInterval(timer);
+  }, [auth, videos, load]);
 
   async function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy) return; setBusy(true); setMessage("");
@@ -190,10 +196,10 @@ export default function DashboardPage() {
         <Brand />
         <nav className="vc-side-nav" aria-label="Main navigation">
           <button className={view === "library" ? "vc-side-link active" : "vc-side-link"} onClick={() => setView("library")}>⌂ <span>Home</span></button>
-          <button className="vc-side-link" onClick={() => { setSearch(""); setView("library"); }}>▷ <span>Watch / Library</span></button>
-          <button className={view === "analytics" ? "vc-side-link active" : "vc-side-link"} onClick={() => setView("analytics")}>▥ <span>Analytics</span></button>
-          <Link className="vc-side-link" href="/billing">◇ <span>Plans & billing</span></Link>
-          <Link className="vc-side-link" href="/pricing">＋ <span>Pricing</span></Link>
+          <button className="vc-side-link" onClick={() => { setSearch(""); setView("library"); }}><span className="vc-nav-icon">▷</span><span className="vc-nav-label">Watch / Library</span></button>
+          <button className={view === "analytics" ? "vc-side-link active" : "vc-side-link"} onClick={() => setView("analytics")}><span className="vc-nav-icon">▥</span><span className="vc-nav-label">Analytics</span></button>
+          <Link className="vc-side-link" href="/billing"><span className="vc-nav-icon">◇</span><span className="vc-nav-label">Plans &amp; billing</span></Link>
+          <Link className="vc-side-link" href="/pricing"><span className="vc-nav-icon">＋</span><span className="vc-nav-label">Pricing</span></Link>
         </nav>
         <div className="vc-storage-card">
           <div className="vc-storage-heading"><strong>Storage</strong><span>LOCAL</span></div>
@@ -201,7 +207,7 @@ export default function DashboardPage() {
           <small>{usage ? "Usage from your original video files" : "Storage usage unavailable"}</small>
           <p className="vc-storage-foot">Storage allowance is not yet enforced.</p>
         </div>
-        <button className="vc-side-link vc-logout" onClick={() => { sessionStorage.removeItem("vc-basic"); setAuth(""); setVideos([]); setUsage(null); }}>↪ <span>Sign out</span></button>
+        <button className="vc-side-link vc-logout" onClick={() => { sessionStorage.removeItem("vc-basic"); setAuth(""); setVideos([]); setUsage(null); }}><span className="vc-nav-icon">↪</span><span className="vc-nav-label">Sign out</span></button>
       </aside>
 
       <section className="vc-main">
