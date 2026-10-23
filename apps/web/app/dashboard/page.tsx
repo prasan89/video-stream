@@ -341,8 +341,17 @@ export default function DashboardPage() {
           <div><p className="eyebrow">ADD TO YOUR LIBRARY</p><h2>Upload a video</h2><p>Choose a video file. FFmpeg will prepare it for HLS playback in the background.</p></div>
           <form onSubmit={upload} className="vc-upload-form">
             <label htmlFor="video-title">Video title</label><input id="video-title" value={title} onChange={event => setTitle(event.target.value)} maxLength={250} required />
-            <label htmlFor="video-file">Video file</label><input id="video-file" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska" onChange={event => setFile(event.target.files?.[0] || null)} required />
-            {file && <p className="vc-file-selected">{file.name} · {formatBytes(file.size)} · SHA-256 verification and retry enabled</p>}
+            <label htmlFor="video-file">Video file</label>
+            <div className={file ? "vc-file-dropzone has-file" : "vc-file-dropzone"}>
+              <input className="vc-file-input" id="video-file" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska" onChange={event => setFile(event.target.files?.[0] || null)} required aria-describedby="video-file-help" />
+              <span className="vc-file-icon" aria-hidden="true">{file ? "✓" : "↑"}</span>
+              <div className="vc-file-copy">
+                <strong>{file ? file.name : "Choose a video to upload"}</strong>
+                <span>{file ? `${formatBytes(file.size)} · Ready to upload` : "Click to browse your device"}</span>
+              </div>
+              <span className="vc-file-browse">{file ? "Change file" : "Browse files"}</span>
+            </div>
+            <p className="vc-file-help" id="video-file-help">MP4, MOV, WebM or MKV · SHA-256 verification and retry enabled</p>
             {busy && <div className="vc-upload-progress" role="status"><div className="vc-progress"><span style={{ width: `${uploadProgress}%` }} /></div><small>{uploadProgress}% uploaded</small></div>}
             <div className="vc-upload-actions"><button type="button" className="vc-secondary" onClick={() => setShowUpload(false)}>Cancel</button><button className="vc-primary" disabled={busy || !file}>{busy ? "Uploading…" : "Upload video"}</button></div>
           </form>
