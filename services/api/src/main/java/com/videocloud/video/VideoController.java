@@ -1,0 +1,44 @@
+package com.videocloud.video;
+import com.videocloud.api.CurrentWorkspace;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
+import java.io.IOException;
+import java.nio.file.*;
+import java.util.*;
+import java.util.regex.Pattern;
+@RestController @RequestMapping("/api/v1/videos")
+public class VideoController {
+ public record VideoDto(UUID id,String title,String description,String visibility,String status,Long durationSeconds,String createdAt){}
+ public record UpdateVideoRequest(@NotBlank @Size(max=250) String title,@Size(max=10000) String description,String visibility){}
+ private static final Set<String>TYPES=Set.of("video/mp4","video/quicktime","video/webm","video/x-matroska");
+ private static final Pattern ASSET=Pattern.compile("(index\\.m3u8|thumbnail\\.jpg|segment-[0-9]{5}\\.ts)");
+ private final JdbcTemplate jdbc;private final CurrentWorkspace workspaces;private final VideoProcessingService processor;private final Path root;private final long maxBytes;
+ public VideoController(JdbcTemplate jdbc,CurrentWorkspace workspaces,VideoProcessingService processor,@Value("${videocloud.media-root:./var/media}")String mediaRoot,@Value("${videocloud.max-upload-bytes:2147483648}")long maxBytes){this.jdbc=jdbc;this.workspaces=workspaces;this.processor=processor;this.root=Path.of(mediaRoot).toAbsolutePath().normalize();this.maxBytes=maxBytes;}
+ @PostMapping(consumes=MediaType.MULTIPART_FORM_DATA_VALUE) @ResponseStatus(HttpStatus.ACCEPTED)
+ public VideoDto upload(@RequestPart("file")MultipartFile file,@RequestParam("title")@NotBlank@Size(max=250)String title,Authentication auth)throws IOException{
+  if(file.isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Empty upload");if(file.getSize()>maxBytes)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"Upload limit exceeded");
+  if(file.getContentType()==null||!TYPES.contains(file.getContentType()))throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"Allowed formats: MP4, MOV, WebM, MKV");
+  String name=Optional.ofNullable(file.getOriginalFilename()).orElse("video.mp4");String ext=name.lastIndexOf('.')>=0?name.substring(name.lastIndexOf('.')+1).toLowerCase(Locale.ROOT):"mp4";if(!Set.of("mp4","mov","webm","mkv").contains(ext))throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"Unsupported extension");
+  UUID id=UUID.randomUUID(),ws=workspaces.id(auth),user=workspaces.userId(auth);Path dir=root.resolve(id.toString()).normalize();if(!dir.startsWith(root))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid path");Files.createDirectories(dir);Path source=dir.resolve("source."+ext);
+  try{file.transferTo(source);jdbc.update("INSERT INTO videos(id,workspace_id,title,visibility,status,source_object_key,created_by) VALUES (?,?,?,'PRIVATE','PROCESSING',?,?)",id,ws,title.trim(),root.relativize(source).toString(),user);jdbc.update("INSERT INTO video_assets(video_id,asset_type,object_key,mime_type,size_bytes) VALUES (?,'ORIGINAL',?,?,?)",id,root.relativize(source).toString(),file.getContentType(),file.getSize());}catch(Exception e){deleteTree(dir);throw e;}
+  processor.process(id,source,dir);return find(id,ws);
+ }
+ @GetMapping public List<VideoDto> list(Authentication auth){return jdbc.query("SELECT id,title,description,visibility,status,duration_seconds,created_at FROM videos WHERE workspace_id=? AND deleted_at IS NULL ORDER BY created_at DESC",(rs,n)->dto(rs),workspaces.id(auth));}
+ @GetMapping("/{id}")public VideoDto get(@PathVariable UUID id,Authentication auth){return find(id,workspaces.id(auth));}
+ @PatchMapping("/{id}")public VideoDto update(@PathVariable UUID id,@Valid @RequestBody UpdateVideoRequest r,Authentication auth){if(r.visibility()!=null&&!Set.of("PRIVATE","UNLISTED","PUBLIC").contains(r.visibility()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid visibility");UUID ws=workspaces.id(auth);int n=jdbc.update("UPDATE videos SET title=?,description=?,visibility=COALESCE(?,visibility),updated_at=now() WHERE id=? AND workspace_id=? AND deleted_at IS NULL",r.title().trim(),r.description(),r.visibility(),id,ws);if(n==0)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Video not found");return find(id,ws);}
+ @DeleteMapping("/{id}")@ResponseStatus(HttpStatus.NO_CONTENT)public void delete(@PathVariable UUID id,Authentication auth){UUID ws=workspaces.id(auth);int n=jdbc.update("UPDATE videos SET status='DELETED',deleted_at=now(),updated_at=now() WHERE id=? AND workspace_id=? AND deleted_at IS NULL",id,ws);if(n==0)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Video not found");deleteTree(root.resolve(id.toString()).normalize());}
+ @GetMapping("/{id}/assets/{asset}")public ResponseEntity<Resource> asset(@PathVariable UUID id,@PathVariable String asset,Authentication auth){UUID ws=workspaces.id(auth);var rows=jdbc.query("SELECT status FROM videos WHERE id=? AND workspace_id=? AND deleted_at IS NULL",(rs,n)->rs.getString(1),id,ws);if(rows.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Video not found");if(!ASSET.matcher(asset).matches())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Asset not found");Path dir=root.resolve(id.toString()).normalize(),file=dir.resolve(asset).normalize();if(!file.startsWith(dir)||!Files.isRegularFile(file))throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Asset not found");MediaType type=asset.endsWith(".m3u8")?MediaType.parseMediaType("application/vnd.apple.mpegurl"):asset.endsWith(".ts")?MediaType.parseMediaType("video/mp2t"):MediaType.IMAGE_JPEG;return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL,"private, no-store").contentType(type).body(new FileSystemResource(file));}
+ private VideoDto find(UUID id,UUID ws){var rows=jdbc.query("SELECT id,title,description,visibility,status,duration_seconds,created_at FROM videos WHERE id=? AND workspace_id=? AND deleted_at IS NULL",(rs,n)->dto(rs),id,ws);if(rows.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Video not found");return rows.get(0);}
+ private VideoDto dto(java.sql.ResultSet r)throws java.sql.SQLException{Object d=r.getObject("duration_seconds");return new VideoDto(r.getObject("id",UUID.class),r.getString("title"),r.getString("description"),r.getString("visibility"),r.getString("status"),d==null?null:((Number)d).longValue(),r.getTimestamp("created_at").toInstant().toString());}
+ private void deleteTree(Path dir){if(!dir.normalize().startsWith(root)||!Files.exists(dir))return;try(var paths=Files.walk(dir)){paths.sorted(Comparator.reverseOrder()).forEach(p->{try{Files.deleteIfExists(p);}catch(IOException ignored){}});}catch(IOException ignored){}}
+}
