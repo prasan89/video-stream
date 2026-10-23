@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint app --no-eslintrc --env es2021,browser,node --parser-options '{\"ecmaVersion\":\"latest\",\"sourceType\":\"module\",\"ecmaFeatures\":{\"jsx\":true}}' --rule 'no-undef: off' --rule 'no-unused-vars: off'",
+    "lint": "next lint",
     "test": "node --test"
   },
   "dependencies": {
@@ -15,7 +15,6 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.1",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
