@@ -33,7 +33,10 @@
 - [x] Compact sidebar icon/label alignment and visible sign-out action
 - [x] Dashboard polls while video processing is in progress to refresh status and storage usage
 - [x] Storage display connected to the existing workspace usage API (original-file bytes only)
-- [ ] Video view/watch-time analytics, real plan quota enforcement, recording/import/live event features
+- [x] Authenticated playback event ingestion for PLAY, PAUSE, COMPLETE and ERROR
+- [x] Workspace analytics API for 30-day playback starts, unique browser sessions, completed plays, watch-time estimates, daily trend and per-video totals
+- [x] Dashboard analytics view connected to recorded events
+- [ ] Anonymous shared/public audience analytics, real plan quota enforcement, recording/import/live event features
 - [x] Search by title and sort by newest, oldest or title
 - [ ] Folders, richer analytics and accessibility polish
 

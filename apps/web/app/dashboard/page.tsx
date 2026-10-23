@@ -9,6 +9,7 @@ type Video = {
   status: string; durationSeconds: number | null; createdAt: string;
 };
 type Usage = { videoCount: number; storedBytes: number; billingMode: string; note?: string };
+type Analytics = { periodDays: number; summary: { plays: number; completions: number; unique_viewers: number; watch_seconds: number }; daily: { day: string; plays: number; unique_viewers: number; watch_seconds: number }[]; videos: { id: string; title: string; plays: number; unique_viewers: number; watch_seconds: number }[]; note: string };
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/v1";
 const formatBytes = (bytes: number) => {
   if (!bytes) return "0 B";
@@ -28,6 +29,8 @@ export default function DashboardPage() {
   const [authReady, setAuthReady] = useState(false);
   const [videos, setVideos] = useState<Video[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [analyticsError, setAnalyticsError] = useState("");
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
@@ -72,6 +75,16 @@ export default function DashboardPage() {
     setAuthReady(true);
   }, []);
   useEffect(() => { if (auth) { sessionStorage.setItem("vc-basic", auth); void load(); } }, [auth, load]);
+  useEffect(() => {
+    if (!auth || view !== "analytics") return;
+    let cancelled = false;
+    fetch(`${API}/analytics`, { headers: headers() }).then(async response => {
+      if (!response.ok) throw new Error(`Analytics request failed (HTTP ${response.status}).`);
+      return await response.json() as Analytics;
+    }).then(data => { if (!cancelled) { setAnalytics(data); setAnalyticsError(""); } })
+      .catch(error => { if (!cancelled) setAnalyticsError(error instanceof Error ? error.message : "Could not load analytics."); });
+    return () => { cancelled = true; };
+  }, [auth, view, headers]);
   // Keep processing status and storage figures current while FFmpeg runs.
   useEffect(() => {
     if (!auth || !videos.some(video => video.status === "PROCESSING" || video.status === "UPLOADED" || video.status === "QUEUED")) return;
@@ -237,9 +250,17 @@ export default function DashboardPage() {
         </section>}
 
         {view === "analytics" ? <section className="vc-section">
-          <p className="eyebrow">WORKSPACE INSIGHTS</p><h1>Analytics</h1>
-          <div className="vc-metric-grid"><article className="vc-metric"><span>Videos in library</span><strong>{usage?.videoCount ?? videos.length}</strong></article><article className="vc-metric"><span>Original storage used</span><strong>{formatBytes(storedBytes)}</strong></article><article className="vc-metric"><span>Video views</span><strong>—</strong><small>Playback analytics are not implemented yet</small></article></div>
-          <div className="vc-empty-note"><strong>Playback analytics coming next</strong><p>View counts, unique viewers, watch time and referrers are not collected yet, so this page intentionally does not invent metrics.</p></div>
+          <p className="eyebrow">WORKSPACE INSIGHTS · LAST 30 DAYS</p><h1>Analytics</h1>
+          <div className="vc-metric-grid">
+            <article className="vc-metric"><span>Playback starts</span><strong>{analytics?.summary.plays ?? "—"}</strong></article>
+            <article className="vc-metric"><span>Unique viewer sessions</span><strong>{analytics?.summary.unique_viewers ?? "—"}</strong></article>
+            <article className="vc-metric"><span>Watch time</span><strong>{analytics ? `${Math.floor(analytics.summary.watch_seconds / 60)} min` : "—"}</strong><small>{analytics ? `${analytics.summary.completions} completed plays` : "Loading recorded events"}</small></article>
+          </div>
+          {analyticsError && <p className="vc-alert" role="alert">{analyticsError}</p>}
+          {!analytics && !analyticsError && <p role="status">Loading playback analytics…</p>}
+          {analytics && <><div className="vc-analytics-panel"><h2>Daily playback starts</h2>{analytics.daily.length === 0 ? <p>No playback events yet. Play a video from your signed-in creator dashboard to start collecting analytics.</p> : <div className="vc-daily-bars">{analytics.daily.map(day => <div className="vc-daily-bar" key={day.day} title={`${day.day}: ${day.plays} starts`}><div><span style={{height:`${Math.max(4, day.plays / Math.max(1,...analytics.daily.map(item=>item.plays))*100)}%`}} /></div><small>{String(day.day).slice(5)}</small><strong>{day.plays}</strong></div>)}</div>}</div>
+          <div className="vc-analytics-panel"><h2>Top videos</h2>{analytics.videos.length === 0 ? <p>No videos in this workspace yet.</p> : <div className="vc-analytics-table"><div className="vc-analytics-row header"><span>Video</span><span>Starts</span><span>Unique sessions</span><span>Watch time</span></div>{analytics.videos.map(video => <div className="vc-analytics-row" key={video.id}><span>{video.title}</span><span>{video.plays}</span><span>{video.unique_viewers}</span><span>{Math.floor(video.watch_seconds/60)} min</span></div>)}</div>}</div>
+          <p className="vc-analytics-note">{analytics.note}</p></>}
         </section> : <section className="vc-section">
           <div className="vc-section-heading"><div><p className="eyebrow">YOUR CONTENT</p><h1>Video library</h1><p className="vc-subtitle">Manage, preview and share videos from your workspace.</p></div><div className="vc-library-controls"><select aria-label="Sort videos" value={sort} onChange={event => setSort(event.target.value)}><option value="newest">Recently added</option><option value="oldest">Oldest first</option><option value="title">Title A–Z</option></select><button className="vc-secondary" onClick={() => void load()}>↻ Refresh</button></div></div>
           <div className="vc-library-summary"><span>{filteredVideos.length} {filteredVideos.length === 1 ? "video" : "videos"}</span><span>{formatBytes(storedBytes)} stored</span></div>
