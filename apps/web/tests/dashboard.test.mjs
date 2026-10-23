@@ -32,3 +32,16 @@ test("dashboard offers actual navigation for library, analytics, billing and pri
   assert.match(source, /\/billing/);
   assert.match(source, /\/pricing/);
 });
+
+test("sidebar uses dedicated compact icon and label elements", async () => {
+  const source = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /className="vc-nav-icon"/);
+  assert.match(source, /className="vc-nav-label"/);
+  assert.match(source, /Watch \/ Library/);
+});
+
+test("processing videos trigger periodic refreshes for status and storage", async () => {
+  const source = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /setInterval\(\(\) => \{ void load\(\); \}, 4000\)/);
+  assert.match(source, /video\.status === "PROCESSING"/);
+});
