@@ -4,7 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import static org.assertj.core.api.Assertions.assertThat;
-@SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest
 class LocalSchemaIntegrationTest {
  @Autowired JdbcTemplate jdbc;
  @Test void flywayCreatesExpectedLocalMvpTables(){
