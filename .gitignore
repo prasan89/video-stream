@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.env.local
+node_modules/
+.next/
+out/
+dist/
+target/
+.idea/
+.vscode/
+.DS_Store
+*.log
+coverage/
+terraform.tfstate*
+.terraform/
