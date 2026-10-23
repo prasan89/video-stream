@@ -18,7 +18,12 @@
 ## Phase 3 — upload
 - [x] Multipart upload with configured byte limit and MIME/extension allowlist
 - [x] Local media storage and video metadata
-- [ ] Resumable/chunked uploads, checksum validation, quotas and recovery
+- [x] Workspace plan-based storage and video-count quota enforcement on standard uploads (FREE fallback; active/trial subscription plan when present)
+- [x] Resumable uploads with 8 MiB chunks, per-chunk SHA-256, optional full-file SHA-256, idempotent chunk retries, upload status and completion validation
+- [x] Client retries transient chunk failures up to three attempts and displays upload progress
+- [x] Usage API reports plan, storage limit, available bytes, in-progress reserved bytes and video limit
+- [x] Startup recovery requeues videos left in PROCESSING when the original file is present; failed videos can be manually retried
+- [ ] Scheduled cleanup for abandoned/expired upload-session files, end-to-end backend tests for concurrent quota reservations, and browser-driven large-file interruption tests
 
 ## Phase 4 — playback
 - [x] Async FFmpeg thumbnail and HLS generation

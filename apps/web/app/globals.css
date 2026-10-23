@@ -145,3 +145,7 @@
 .vc-analytics-row.header{border-top:0;color:#78828d;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
 .vc-analytics-note{font-size:11px;color:#7b8490;line-height:1.6;margin:18px 0}
 @media(max-width:650px){.vc-analytics-panel{padding:15px}.vc-analytics-row{grid-template-columns:minmax(140px,2fr) repeat(3,minmax(85px,1fr));gap:8px}.vc-daily-bars{gap:6px}}
+
+.vc-upload-progress{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.vc-upload-progress .vc-progress{height:8px}
+.vc-upload-progress small{font-size:11px;color:#65717c}

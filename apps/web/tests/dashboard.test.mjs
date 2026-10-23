@@ -18,7 +18,24 @@ test("workspace storage display uses real usage API values without invented anal
   assert.match(source, /Playback starts/);
   assert.match(source, /Unique viewer sessions/);
   assert.match(source, /Top videos/);
-  assert.match(source, /Storage allowance is not yet enforced/);
+  // plan quota is now real; the old placeholder is gone
+  assert.match(source, /storageLimitBytes/);
+  assert.match(source, /videoLimit/);
+  assert.match(source, /planCode/);
+});
+
+test("dashboard uses resumable chunked upload with SHA-256 checksums", async () => {
+  const source = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /uploads\/resumable/);
+  assert.match(source, /X-Chunk-SHA256/);
+  assert.match(source, /chunkSizeBytes/);
+  assert.match(source, /chunkCount/);
+  assert.match(source, /uploads\/resumable\/\$\{session\.uploadId\}\/complete/);
+  // browser-refresh resume: session persisted in localStorage and chunks queried from server
+  assert.match(source, /vc-pending-upload/);
+  assert.match(source, /localStorage\.setItem/);
+  assert.match(source, /localStorage\.removeItem/);
+  assert.match(source, /uploaded\.has\(index\)/);
 });
 
 test("HLS player attaches Authorization to HLS requests", async () => {
