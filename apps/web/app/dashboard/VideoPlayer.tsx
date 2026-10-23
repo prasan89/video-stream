@@ -4,7 +4,7 @@ import Hls from "hls.js";
 const API=process.env.NEXT_PUBLIC_API_BASE_URL||"http://localhost:8080/api/v1";
 type PlaybackEvent = "PLAY" | "PAUSE" | "COMPLETE" | "ERROR";
 export default function VideoPlayer({videoId,auth,sourcePath}:{videoId:string;auth:string;sourcePath?:string}){
- const ref=useRef<HTMLVideoElement>(null);const lastReportedTime=useRef(0);const [error,setError]=useState("");
+ const ref=useRef<HTMLVideoElement>(null);const [error,setError]=useState("");
  useEffect(()=>{
   const video=ref.current;if(!video)return;
   const relativePath=sourcePath?.startsWith("/api/v1/")?sourcePath.slice("/api/v1".length):sourcePath;
