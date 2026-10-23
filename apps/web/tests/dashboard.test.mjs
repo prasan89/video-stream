@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 test("creator workspace exposes authenticated library, upload, refresh and playback", async () => {
   const source = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
-  assert.match(source, /const API=/);
+  assert.match(source, /const API\s*=/);
   assert.match(source, /Upload video/);
   assert.match(source, /void load\(\)/);
   assert.match(source, /VideoPlayer/);
