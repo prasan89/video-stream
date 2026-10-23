@@ -8,7 +8,8 @@ type Video = {
   id: string; title: string; description: string | null; visibility: string;
   status: string; durationSeconds: number | null; createdAt: string;
 };
-type Usage = { videoCount: number; storedBytes: number; reservedUploadBytes?: number; storageLimitBytes?: number; availableBytes?: number; videoLimit?: number; planCode?: string; billingMode: string; note?: string };\ntype Analytics = { periodDays: number; summary: { plays: number; completions: number; unique_viewers: number; watch_seconds: number }; daily: { day: string; plays: number; unique_viewers: number; watch_seconds: number }[]; videos: { id: string; title: string; plays: number; unique_viewers: number; watch_seconds: number }[]; note: string };
+type Usage = { videoCount: number; storedBytes: number; reservedUploadBytes?: number; storageLimitBytes?: number; availableBytes?: number; videoLimit?: number; planCode?: string; billingMode: string; note?: string };
+type Analytics = { periodDays: number; summary: { plays: number; completions: number; unique_viewers: number; watch_seconds: number }; daily: { day: string; plays: number; unique_viewers: number; watch_seconds: number }[]; videos: { id: string; title: string; plays: number; unique_viewers: number; watch_seconds: number }[]; note: string };
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/v1";
 const formatBytes = (bytes: number) => {
   if (!bytes) return "0 B";
@@ -27,12 +28,15 @@ export default function DashboardPage() {
   const [auth, setAuth] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [videos, setVideos] = useState<Video[]>([]);
-  const [usage, setUsage] = useState<Usage | null>(null);\n  const [analytics, setAnalytics] = useState<Analytics | null>(null);\n  const [analyticsError, setAnalyticsError] = useState("");
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [analyticsError, setAnalyticsError] = useState("");
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [messageError, setMessageError] = useState(false);
-  const [busy, setBusy] = useState(false);\n  const [uploadProgress, setUploadProgress] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
@@ -71,7 +75,17 @@ export default function DashboardPage() {
     if (saved) setAuth(saved);
     setAuthReady(true);
   }, []);
-  useEffect(() => { if (auth) { sessionStorage.setItem("vc-basic", auth); void load(); } }, [auth, load]);\n  useEffect(() => {\n    if (!auth || view !== "analytics") return;\n    let cancelled = false;\n    fetch(`${API}/analytics`, { headers: headers() }).then(async response => {\n      if (!response.ok) throw new Error(`Analytics request failed (HTTP ${response.status}).`);\n      return await response.json() as Analytics;\n    }).then(data => { if (!cancelled) { setAnalytics(data); setAnalyticsError(""); } })\n      .catch(error => { if (!cancelled) setAnalyticsError(error instanceof Error ? error.message : "Could not load analytics."); });\n    return () => { cancelled = true; };\n  }, [auth, view, headers]);
+  useEffect(() => { if (auth) { sessionStorage.setItem("vc-basic", auth); void load(); } }, [auth, load]);
+  useEffect(() => {
+    if (!auth || view !== "analytics") return;
+    let cancelled = false;
+    fetch(`${API}/analytics`, { headers: headers() }).then(async response => {
+      if (!response.ok) throw new Error(`Analytics request failed (HTTP ${response.status}).`);
+      return await response.json() as Analytics;
+    }).then(data => { if (!cancelled) { setAnalytics(data); setAnalyticsError(""); } })
+      .catch(error => { if (!cancelled) setAnalyticsError(error instanceof Error ? error.message : "Could not load analytics."); });
+    return () => { cancelled = true; };
+  }, [auth, view, headers]);
   // Keep processing status and storage figures current while FFmpeg runs.
   useEffect(() => {
     if (!auth || !videos.some(video => video.status === "PROCESSING" || video.status === "UPLOADED" || video.status === "QUEUED")) return;
@@ -194,7 +208,8 @@ export default function DashboardPage() {
     .sort((a, b) => sort === "title" ? a.title.localeCompare(b.title) : sort === "oldest" ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt)), [videos, search, sort]);
   const storedBytes = usage?.storedBytes ?? 0;
   const storageLimit = 2 * 1024 ** 3;
-  const effectiveLimit = usage?.storageLimitBytes ?? storageLimit;\n  const storagePercent = Math.min(100, (storedBytes / Math.max(1,effectiveLimit)) * 100);
+  const effectiveLimit = usage?.storageLimitBytes ?? storageLimit;
+  const storagePercent = Math.min(100, (storedBytes / Math.max(1,effectiveLimit)) * 100);
 
   if (!authReady) return <main className="workspace-loading">Loading your workspace…</main>;
 
@@ -267,7 +282,8 @@ export default function DashboardPage() {
           <form onSubmit={upload} className="vc-upload-form">
             <label htmlFor="video-title">Video title</label><input id="video-title" value={title} onChange={event => setTitle(event.target.value)} maxLength={250} required />
             <label htmlFor="video-file">Video file</label><input id="video-file" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska" onChange={event => setFile(event.target.files?.[0] || null)} required />
-            {file && <p className="vc-file-selected">{file.name} · {formatBytes(file.size)} · SHA-256 verification and retry enabled</p>}\n            {busy && <div className="vc-upload-progress" role="status"><div className="vc-progress"><span style={{ width: `${uploadProgress}%` }} /></div><small>{uploadProgress}% uploaded</small></div>}
+            {file && <p className="vc-file-selected">{file.name} · {formatBytes(file.size)} · SHA-256 verification and retry enabled</p>}
+            {busy && <div className="vc-upload-progress" role="status"><div className="vc-progress"><span style={{ width: `${uploadProgress}%` }} /></div><small>{uploadProgress}% uploaded</small></div>}
             <div className="vc-upload-actions"><button type="button" className="vc-secondary" onClick={() => setShowUpload(false)}>Cancel</button><button className="vc-primary" disabled={busy || !file}>{busy ? "Uploading…" : "Upload video"}</button></div>
           </form>
         </section>}
