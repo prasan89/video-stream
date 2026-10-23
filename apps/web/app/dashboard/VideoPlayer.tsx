@@ -3,8 +3,8 @@ import {useEffect,useRef,useState} from "react";
 import Hls from "hls.js";
 const API=process.env.NEXT_PUBLIC_API_BASE_URL||"http://localhost:8080/api/v1";
 type PlaybackEvent = "PLAY" | "PAUSE" | "COMPLETE" | "ERROR";
-export default function VideoPlayer({videoId,auth,workspaceId,sourcePath}:{videoId:string;auth:string;workspaceId:string;sourcePath?:string}){
- const ref=useRef<HTMLVideoElement>(null);const lastReportedTime=useRef(0);const [error,setError]=useState("");
+export default function VideoPlayer({videoId,auth,workspaceId,sourcePath}:{videoId:string;auth:string;workspaceId?:string;sourcePath?:string}){
+ const ref=useRef<HTMLVideoElement>(null);const [error,setError]=useState("");
  useEffect(()=>{
   const video=ref.current;if(!video)return;
   const relativePath=sourcePath?.startsWith("/api/v1/")?sourcePath.slice("/api/v1".length):sourcePath;
@@ -27,7 +27,7 @@ export default function VideoPlayer({videoId,auth,workspaceId,sourcePath}:{video
    }catch{return;}
    void fetch(`${API}/analytics/videos/${videoId}/events`,{
     method:"POST",
-    headers:{"Content-Type":"application/json",Authorization:`Basic ${auth}`,"X-Workspace-Id":workspaceId},
+    headers:{"Content-Type":"application/json",Authorization:`Basic ${auth}`,...(workspaceId?{"X-Workspace-Id":workspaceId}:{})},
     body:JSON.stringify({eventType,watchedSeconds:Math.max(0,Math.min(86400,Math.floor(watchedSeconds))),viewerKey}),
     keepalive:true
    }).catch(()=>{});
