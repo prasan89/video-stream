@@ -65,7 +65,7 @@ public class ResumableUploadController {
         Path sessionDir=sessionDir(uploadId);
         try { Files.createDirectories(sessionDir); }
         catch(IOException e){ throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Could not create upload workspace"); }
-        Path assembled=sessionDir.resolve("source."+ext);
+        Path assembled=root.resolve(videoId.toString()).resolve("source."+ext).normalize();\n        if(!assembled.startsWith(root)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid upload path");
         String key=root.relativize(assembled).toString();
         jdbc.update("INSERT INTO videos(id,workspace_id,title,visibility,status,source_object_key,created_by) VALUES (?,?,?,'PRIVATE','UPLOADING',?,?)",
             videoId,workspaceId,request.title().trim(),key,userId);
