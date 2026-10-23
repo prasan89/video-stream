@@ -1,0 +1,1 @@
+import test from "node:test";import assert from "node:assert/strict";import{readFile}from"node:fs/promises";test("dashboard has local auth and upload/status controls",async()=>{const s=await readFile(new URL("../app/dashboard/page.tsx",import.meta.url),"utf8");assert.match(s,/\/api\/v1\/videos/);assert.match(s,/Upload video/);assert.match(s,/Refresh status/);});
