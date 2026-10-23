@@ -149,3 +149,6 @@
 .vc-upload-progress{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .vc-upload-progress .vc-progress{height:8px}
 .vc-upload-progress small{font-size:11px;color:#65717c}
+
+.vc-workspace-picker{display:flex;align-items:center;gap:8px;font-size:12px;color:#65717c}
+.vc-workspace-picker select{max-width:220px;border:1px solid #d9e0e7;border-radius:8px;padding:8px 10px;background:#fff;color:#202a34}
