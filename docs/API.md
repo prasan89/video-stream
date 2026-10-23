@@ -1,6 +1,6 @@
 # API contracts (target)
 
-Base path: `/api/v1`. JSON requests/responses unless noted. All workspace APIs require authentication and server-side membership checks.
+Base path: `/api/v1`. JSON requests/responses unless noted. All workspace APIs require authentication and server-side membership checks.\n\n## Tenant selection (implemented)\n- `GET /workspaces` lists only workspaces the authenticated user belongs to.\n- Send `X-Workspace-Id: <workspace UUID>` on workspace-scoped API requests when the user belongs to more than one workspace. The API verifies membership for every requested workspace; an arbitrary ID is never accepted as authorization.\n- If the user has exactly one workspace, the API selects it automatically when the header is omitted. If multiple workspaces exist and no header is provided, the API returns `400` and requires explicit selection.\n- Usage and quota enforcement are calculated per workspace. New original video files and resumable chunks use workspace-specific local directories under `var/media/workspaces/<workspaceId>/`. Legacy object keys remain supported until a verified file migration is performed.
 
 ## Authentication
 - `POST /auth/register`
