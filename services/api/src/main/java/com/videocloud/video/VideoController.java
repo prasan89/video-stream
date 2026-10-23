@@ -9,6 +9,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -24,7 +25,7 @@ public class VideoController {
  private static final Pattern ASSET=Pattern.compile("(index\\.m3u8|thumbnail\\.jpg|segment-[0-9]{5}\\.ts)");
  private final JdbcTemplate jdbc;private final CurrentWorkspace workspaces;private final VideoProcessingService processor;private final WorkspaceQuotaService quotas;private final Path root;private final long maxBytes;
  public VideoController(JdbcTemplate jdbc,CurrentWorkspace workspaces,VideoProcessingService processor,WorkspaceQuotaService quotas,@Value("${videocloud.media-root:./var/media}")String mediaRoot,@Value("${videocloud.max-upload-bytes:2147483648}")long maxBytes){this.jdbc=jdbc;this.workspaces=workspaces;this.processor=processor;this.quotas=quotas;this.root=Path.of(mediaRoot).toAbsolutePath().normalize();this.maxBytes=maxBytes;}
- @PostMapping(consumes=MediaType.MULTIPART_FORM_DATA_VALUE) @ResponseStatus(HttpStatus.ACCEPTED)
+ @PostMapping(consumes=MediaType.MULTIPART_FORM_DATA_VALUE) @ResponseStatus(HttpStatus.ACCEPTED) @Transactional
  public VideoDto upload(@RequestPart("file")MultipartFile file,@RequestParam("title")@NotBlank@Size(max=250)String title,Authentication auth)throws IOException{
   if(file.isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Empty upload");if(file.getSize()>maxBytes)throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,"Upload limit exceeded");
   if(file.getContentType()==null||!TYPES.contains(file.getContentType()))throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"Allowed formats: MP4, MOV, WebM, MKV");
@@ -37,6 +38,15 @@ public class VideoController {
  @GetMapping("/{id}")public VideoDto get(@PathVariable UUID id,Authentication auth){return find(id,workspaces.id(auth));}
  @PatchMapping("/{id}")public VideoDto update(@PathVariable UUID id,@Valid @RequestBody UpdateVideoRequest r,Authentication auth){if(r.visibility()!=null&&!Set.of("PRIVATE","UNLISTED","PUBLIC").contains(r.visibility()))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid visibility");UUID ws=workspaces.id(auth);int n=jdbc.update("UPDATE videos SET title=?,description=?,visibility=COALESCE(?,visibility),updated_at=now() WHERE id=? AND workspace_id=? AND deleted_at IS NULL",r.title().trim(),r.description(),r.visibility(),id,ws);if(n==0)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Video not found");return find(id,ws);}
  @DeleteMapping("/{id}")@ResponseStatus(HttpStatus.NO_CONTENT)public void delete(@PathVariable UUID id,Authentication auth){UUID ws=workspaces.id(auth);int n=jdbc.update("UPDATE videos SET status='DELETED',deleted_at=now(),updated_at=now() WHERE id=? AND workspace_id=? AND deleted_at IS NULL",id,ws);if(n==0)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Video not found");deleteTree(root.resolve(id.toString()).normalize());}
+ @PostMapping("/{id}/retry-processing") @ResponseStatus(HttpStatus.ACCEPTED)
+ public Map<String,Object> retryProcessing(@PathVariable UUID id,Authentication auth){
+  UUID ws=workspaces.id(auth);var rows=jdbc.query("SELECT source_object_key,status FROM videos WHERE id=? AND workspace_id=? AND deleted_at IS NULL",(rs,n)->Map.of("source",rs.getString("source_object_key"),"status",rs.getString("status")),id,ws);
+  if(rows.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Video not found");
+  if(!"FAILED".equals(rows.get(0).get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"Only failed videos can be retried");
+  Path source=root.resolve((String)rows.get(0).get("source")).normalize();if(!source.startsWith(root)||!Files.isRegularFile(source))throw new ResponseStatusException(HttpStatus.CONFLICT,"Original file is missing; upload again");
+  jdbc.update("UPDATE videos SET status='PROCESSING',updated_at=now() WHERE id=? AND workspace_id=?",id,ws);processor.process(id,source,source.getParent());
+  return Map.of("videoId",id.toString(),"status","PROCESSING");
+ }
  @GetMapping("/{id}/assets/{asset}")public ResponseEntity<Resource> asset(@PathVariable UUID id,@PathVariable String asset,Authentication auth){UUID ws=workspaces.id(auth);var rows=jdbc.query("SELECT status FROM videos WHERE id=? AND workspace_id=? AND deleted_at IS NULL",(rs,n)->rs.getString(1),id,ws);if(rows.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Video not found");if(!ASSET.matcher(asset).matches())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Asset not found");Path dir=root.resolve(id.toString()).normalize(),file=dir.resolve(asset).normalize();if(!file.startsWith(dir)||!Files.isRegularFile(file))throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Asset not found");MediaType type=asset.endsWith(".m3u8")?MediaType.parseMediaType("application/vnd.apple.mpegurl"):asset.endsWith(".ts")?MediaType.parseMediaType("video/mp2t"):MediaType.IMAGE_JPEG;return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL,"private, no-store").contentType(type).body(new FileSystemResource(file));}
  private VideoDto find(UUID id,UUID ws){var rows=jdbc.query("SELECT id,title,description,visibility,status,duration_seconds,created_at FROM videos WHERE id=? AND workspace_id=? AND deleted_at IS NULL",(rs,n)->dto(rs),id,ws);if(rows.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Video not found");return rows.get(0);}
  private VideoDto dto(java.sql.ResultSet r)throws java.sql.SQLException{Object d=r.getObject("duration_seconds");return new VideoDto(r.getObject("id",UUID.class),r.getString("title"),r.getString("description"),r.getString("visibility"),r.getString("status"),d==null?null:((Number)d).longValue(),r.getTimestamp("created_at").toInstant().toString());}
