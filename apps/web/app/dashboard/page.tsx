@@ -8,7 +8,8 @@ type Video = {
   id: string; title: string; description: string | null; visibility: string;
   status: string; durationSeconds: number | null; createdAt: string;
 };
-type Usage = { videoCount: number; storedBytes: number; billingMode: string; note?: string };\ntype Analytics = { periodDays: number; summary: { plays: number; completions: number; unique_viewers: number; watch_seconds: number }; daily: { day: string; plays: number; unique_viewers: number; watch_seconds: number }[]; videos: { id: string; title: string; plays: number; unique_viewers: number; watch_seconds: number }[]; note: string };
+type Usage = { videoCount: number; storedBytes: number; billingMode: string; note?: string };
+type Analytics = { periodDays: number; summary: { plays: number; completions: number; unique_viewers: number; watch_seconds: number }; daily: { day: string; plays: number; unique_viewers: number; watch_seconds: number }[]; videos: { id: string; title: string; plays: number; unique_viewers: number; watch_seconds: number }[]; note: string };
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/v1";
 const formatBytes = (bytes: number) => {
   if (!bytes) return "0 B";
@@ -27,7 +28,9 @@ export default function DashboardPage() {
   const [auth, setAuth] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [videos, setVideos] = useState<Video[]>([]);
-  const [usage, setUsage] = useState<Usage | null>(null);\n  const [analytics, setAnalytics] = useState<Analytics | null>(null);\n  const [analyticsError, setAnalyticsError] = useState("");
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [analyticsError, setAnalyticsError] = useState("");
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
@@ -71,7 +74,17 @@ export default function DashboardPage() {
     if (saved) setAuth(saved);
     setAuthReady(true);
   }, []);
-  useEffect(() => { if (auth) { sessionStorage.setItem("vc-basic", auth); void load(); } }, [auth, load]);\n  useEffect(() => {\n    if (!auth || view !== "analytics") return;\n    let cancelled = false;\n    fetch(`${API}/analytics`, { headers: headers() }).then(async response => {\n      if (!response.ok) throw new Error(`Analytics request failed (HTTP ${response.status}).`);\n      return await response.json() as Analytics;\n    }).then(data => { if (!cancelled) { setAnalytics(data); setAnalyticsError(""); } })\n      .catch(error => { if (!cancelled) setAnalyticsError(error instanceof Error ? error.message : "Could not load analytics."); });\n    return () => { cancelled = true; };\n  }, [auth, view, headers]);
+  useEffect(() => { if (auth) { sessionStorage.setItem("vc-basic", auth); void load(); } }, [auth, load]);
+  useEffect(() => {
+    if (!auth || view !== "analytics") return;
+    let cancelled = false;
+    fetch(`${API}/analytics`, { headers: headers() }).then(async response => {
+      if (!response.ok) throw new Error(`Analytics request failed (HTTP ${response.status}).`);
+      return await response.json() as Analytics;
+    }).then(data => { if (!cancelled) { setAnalytics(data); setAnalyticsError(""); } })
+      .catch(error => { if (!cancelled) setAnalyticsError(error instanceof Error ? error.message : "Could not load analytics."); });
+    return () => { cancelled = true; };
+  }, [auth, view, headers]);
   // Keep processing status and storage figures current while FFmpeg runs.
   useEffect(() => {
     if (!auth || !videos.some(video => video.status === "PROCESSING" || video.status === "UPLOADED" || video.status === "QUEUED")) return;

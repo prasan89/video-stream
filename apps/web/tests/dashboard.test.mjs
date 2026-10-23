@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 test("creator workspace exposes authenticated library, upload, refresh and playback", async () => {
   const source = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
-  assert.match(source, /const API=/);
+  assert.match(source, /const API\s*=/);
   assert.match(source, /Upload video/);
   assert.match(source, /void load\(\)/);
   assert.match(source, /VideoPlayer/);
@@ -15,7 +15,9 @@ test("workspace storage display uses real usage API values without invented anal
   const source = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
   assert.match(source, /storedBytes/);
   assert.match(source, /Storage usage unavailable/);
-  assert.match(source, /Playback starts/);\n  assert.match(source, /Unique viewer sessions/);\n  assert.match(source, /Top videos/);
+  assert.match(source, /Playback starts/);
+  assert.match(source, /Unique viewer sessions/);
+  assert.match(source, /Top videos/);
   assert.match(source, /Storage allowance is not yet enforced/);
 });
 
