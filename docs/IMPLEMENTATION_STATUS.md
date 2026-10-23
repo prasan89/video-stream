@@ -23,7 +23,9 @@
 - [x] Client retries transient chunk failures up to three attempts and displays upload progress
 - [x] Usage API reports plan, storage limit, available bytes, in-progress reserved bytes and video limit
 - [x] Startup recovery requeues videos left in PROCESSING when the original file is present; failed videos can be manually retried
-- [ ] Scheduled cleanup for abandoned/expired upload-session files, end-to-end backend tests for concurrent quota reservations, and browser-driven large-file interruption tests
+- [x] Scheduled cleanup marks expired upload sessions EXPIRED, releases placeholder video slots, and removes local temporary chunk directories
+- [x] Dashboard persists pending upload metadata and resumes missing chunks after refresh when the same file is reselected
+- [ ] End-to-end backend tests for concurrent quota reservations and browser-driven large-file interruption tests
 
 ## Phase 4 — playback
 - [x] Async FFmpeg thumbnail and HLS generation
@@ -37,6 +39,7 @@
 - [x] Responsive creator workspace layout with sidebar, quick actions, library search/sort, and analytics placeholder that does not fabricate metrics
 - [x] Compact sidebar icon/label alignment and visible sign-out action
 - [x] Dashboard polls while video processing is in progress to refresh status and storage usage
+- [x] Resumable upload recovery UI can restore a saved session and skip chunks already confirmed by the API
 - [x] Storage display connected to the existing workspace usage API (original-file bytes only)
 - [x] Authenticated playback event ingestion for PLAY, PAUSE, COMPLETE and ERROR
 - [x] Workspace analytics API for 30-day playback starts, unique browser sessions, completed plays, watch-time estimates, daily trend and per-video totals
