@@ -8,6 +8,8 @@
 
 ## Phase 2 — authentication
 - [x] Registration with BCrypt password hashing and OWNER workspace membership
+- [x] Signup UI wired to the registration API with validation, duplicate-account feedback and dashboard redirect
+- [x] Signup verifies newly created credentials against the authenticated video API before storing local Basic credentials
 - [x] Database-backed HTTP Basic authentication for the local API
 - [x] Workspace-derived authorization for video operations
 - [x] Integration test for cross-workspace video isolation
@@ -27,6 +29,9 @@
 
 ## Phase 5 — creator dashboard
 - [x] Upload/list/status/visibility/delete UI and usage summary
+- [x] Responsive creator workspace layout with sidebar, quick actions, library search/sort, and analytics placeholder that does not fabricate metrics
+- [x] Storage display connected to the existing workspace usage API (original-file bytes only)
+- [ ] Video view/watch-time analytics, real plan quota enforcement, recording/import/live event features
 - [x] Search by title and sort by newest, oldest or title
 - [ ] Folders, richer analytics and accessibility polish
 
