@@ -127,21 +127,48 @@ export default function DashboardPage() {
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!file || !title.trim() || busy) return;
     setBusy(true); setUploadProgress(0); setMessage("Preparing resumable upload…"); setMessageError(false);
+    const pendingKey = "vc-pending-upload";
     try {
       const sha256 = async (blob: Blob) => {
         const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
         return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
       };
       const fileSha = await sha256(file);
-      const start = await fetch(`${API}/uploads/resumable`, {
-        method: "POST", headers: headers(true),
-        body: JSON.stringify({ title: title.trim(), sizeBytes: file.size, contentType: file.type || "video/mp4", filename: file.name, sha256: fileSha })
-      });
-      const session = await start.json().catch(() => ({}));
-      if (!start.ok) throw new Error(session.message || `Could not start upload (HTTP ${start.status}).`);
-      const chunkSize = Number(session.chunkSizeBytes);
-      const chunks = Number(session.chunkCount);
+      type PendingUpload = { uploadId: string; fileName: string; sizeBytes: number; sha256: string; title: string; chunkSizeBytes: number; chunkCount: number };
+      let session: PendingUpload | null = null;
+      let uploaded = new Set<number>();
+      const saved = localStorage.getItem(pendingKey);
+      if (saved) {
+        try {
+          const candidate = JSON.parse(saved) as PendingUpload;
+          if (candidate.fileName === file.name && candidate.sizeBytes === file.size &&
+              candidate.sha256 === fileSha && candidate.title === title.trim()) {
+            const statusResponse = await fetch(`${API}/uploads/resumable/${candidate.uploadId}`, { headers: headers() });
+            if (statusResponse.ok) {
+              const status = await statusResponse.json();
+              if (["CREATED", "UPLOADING"].includes(status.status)) {
+                session = candidate;
+                uploaded = new Set<number>((status.chunks || []).map((chunk: { chunk_index: number }) => Number(chunk.chunk_index)));
+                setMessage(`Resuming upload… ${uploaded.size} of ${candidate.chunkCount} chunks already received.`);
+              }
+            }
+          }
+        } catch { /* A stale or malformed local session is ignored. */ }
+      }
+      if (!session) {
+        const start = await fetch(`${API}/uploads/resumable`, {
+          method: "POST", headers: headers(true),
+          body: JSON.stringify({ title: title.trim(), sizeBytes: file.size, contentType: file.type || "video/mp4", filename: file.name, sha256: fileSha })
+        });
+        const data = await start.json().catch(() => ({}));
+        if (!start.ok) throw new Error(data.message || `Could not start upload (HTTP ${start.status}).`);
+        session = { uploadId: data.uploadId, fileName: file.name, sizeBytes: file.size, sha256: fileSha, title: title.trim(), chunkSizeBytes: Number(data.chunkSizeBytes), chunkCount: Number(data.chunkCount) };
+        localStorage.setItem(pendingKey, JSON.stringify(session));
+      }
+      const chunkSize = session.chunkSizeBytes;
+      const chunks = session.chunkCount;
       for (let index = 0; index < chunks; index++) {
+        if (uploaded.has(index)) continue;
         const chunk = file.slice(index * chunkSize, Math.min(file.size, (index + 1) * chunkSize));
         const chunkSha = await sha256(chunk);
         let lastError: Error | null = null;
@@ -161,13 +188,15 @@ export default function DashboardPage() {
             if (attempt < 2) await new Promise(resolve => window.setTimeout(resolve, 400 * (attempt + 1)));
           }
         }
-        if (lastError) throw new Error(`Chunk ${index + 1}/${chunks} could not be uploaded. Your upload session is retained for retry: ${lastError.message}`);
-        setUploadProgress(Math.round(((index + 1) / chunks) * 100));
-        setMessage(`Uploading video… ${Math.round(((index + 1) / chunks) * 100)}%`);
+        if (lastError) throw new Error(`Chunk ${index + 1}/${chunks} could not be uploaded. Re-select the same file to resume this session: ${lastError.message}`);
+        uploaded.add(index);
+        setUploadProgress(Math.round((uploaded.size / chunks) * 100));
+        setMessage(`Uploading video… ${Math.round((uploaded.size / chunks) * 100)}%`);
       }
       const complete = await fetch(`${API}/uploads/resumable/${session.uploadId}/complete`, { method: "POST", headers: headers() });
       const result = await complete.json().catch(() => ({}));
       if (!complete.ok) throw new Error(result.message || `Could not complete upload (HTTP ${complete.status}).`);
+      localStorage.removeItem(pendingKey);
       setMessage("Upload verified. Video processing has started."); setTitle(""); setFile(null); setShowUpload(false); setUploadProgress(0);
       await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Upload failed."); setMessageError(true); }
