@@ -26,3 +26,12 @@ videocloud:
   media-root: ${VIDEO_MEDIA_ROOT:./var/media}
   ffmpeg-path: ${FFMPEG_PATH:ffmpeg}
   max-upload-bytes: ${MAX_UPLOAD_BYTES:2147483648}
+
+billing:
+  razorpay:
+    mode: ${RAZORPAY_MODE:test}
+    key-id: ${RAZORPAY_KEY_ID:}
+    key-secret: ${RAZORPAY_KEY_SECRET:}
+    webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+    plan-starter: ${RAZORPAY_PLAN_STARTER:}
+    plan-pro: ${RAZORPAY_PLAN_PRO:}
