@@ -62,10 +62,10 @@ public class ResumableUploadController {
         UUID workspaceId=workspaces.id(auth), userId=workspaces.userId(auth);
         quotas.assertCanStartUpload(workspaceId,request.sizeBytes());
         UUID videoId=UUID.randomUUID(), uploadId=UUID.randomUUID();
-        Path sessionDir=sessionDir(uploadId);
+        Path sessionDir=sessionDir(workspaceId,uploadId);
         try { Files.createDirectories(sessionDir); }
         catch(IOException e){ throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,"Could not create upload workspace"); }
-        Path assembled=root.resolve(videoId.toString()).resolve("source."+ext).normalize();
+        Path assembled=root.resolve("workspaces").resolve(workspaceId.toString()).resolve("videos").resolve(videoId.toString()).resolve("source."+ext).normalize();
         if(!assembled.startsWith(root)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid upload path");
         String key=root.relativize(assembled).toString();
         jdbc.update("INSERT INTO videos(id,workspace_id,title,visibility,status,source_object_key,created_by) VALUES (?,?,?,'PRIVATE','UPLOADING',?,?)",
@@ -93,7 +93,7 @@ public class ResumableUploadController {
         if(!actual.equalsIgnoreCase(suppliedSha)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Chunk checksum mismatch");
         String old=jdbc.query("SELECT sha256 FROM upload_chunks WHERE upload_session_id=? AND chunk_index=?",
             rs->rs.next()?rs.getString(1).trim():null,uploadId,index);
-        Path dir=sessionDir(uploadId);Files.createDirectories(dir);
+        Path dir=sessionDir(workspaceId,uploadId);Files.createDirectories(dir);
         Path chunk=dir.resolve(String.format(Locale.ROOT,"chunk-%08d.part",index));
         if(old!=null) {
             if(!old.equalsIgnoreCase(actual)) throw new ResponseStatusException(HttpStatus.CONFLICT,"Chunk index already uploaded with different content");
@@ -145,7 +145,7 @@ public class ResumableUploadController {
         jdbc.update("UPDATE videos SET status='PROCESSING',updated_at=now() WHERE id=? AND workspace_id=? AND deleted_at IS NULL",videoId,workspaceId);
         jdbc.update("UPDATE upload_sessions SET status='UPLOADED',completed_sha256=?,updated_at=now() WHERE id=?",digest,uploadId);
         jdbc.update("DELETE FROM upload_chunks WHERE upload_session_id=?",uploadId);
-        deleteChunks(sessionDir(uploadId));
+        deleteChunks(sessionDir(workspaceId,uploadId));
         processor.process(videoId,assembled,assembled.getParent());
         return Map.of("uploadId",uploadId.toString(),"videoId",videoId.toString(),"status","PROCESSING","sizeBytes",expected,"sha256",digest);
     }
@@ -187,7 +187,7 @@ public class ResumableUploadController {
         }
         return s;
     }
-    private Path sessionDir(UUID id){return root.resolve("resumable").resolve(id.toString()).normalize();}
+    private Path sessionDir(UUID workspaceId,UUID id){return root.resolve("workspaces").resolve(workspaceId.toString()).resolve("uploads").resolve(id.toString()).normalize();}
     private String extension(String filename){
         String name=filename==null?"video.mp4":filename;
         String ext=name.lastIndexOf('.')>=0?name.substring(name.lastIndexOf('.')+1).toLowerCase(Locale.ROOT):"mp4";
