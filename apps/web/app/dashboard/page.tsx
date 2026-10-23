@@ -8,6 +8,7 @@ type Video = {
   id: string; title: string; description: string | null; visibility: string;
   status: string; durationSeconds: number | null; createdAt: string;
 };
+type Workspace = { id: string; name: string; slug: string; role: string };
 type Usage = { videoCount: number; storedBytes: number; reservedUploadBytes?: number; storageLimitBytes?: number; availableBytes?: number; videoLimit?: number; planCode?: string; billingMode: string; note?: string };
 type Analytics = { periodDays: number; summary: { plays: number; completions: number; unique_viewers: number; watch_seconds: number }; daily: { day: string; plays: number; unique_viewers: number; watch_seconds: number }[]; videos: { id: string; title: string; plays: number; unique_viewers: number; watch_seconds: number }[]; note: string };
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/v1";
@@ -27,6 +28,8 @@ export default function DashboardPage() {
   const [workspaceName, setWorkspaceName] = useState("My Studio");
   const [auth, setAuth] = useState("");
   const [authReady, setAuthReady] = useState(false);
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
@@ -45,11 +48,12 @@ export default function DashboardPage() {
 
   const headers = useCallback((json = false): HeadersInit => ({
     ...(auth ? { Authorization: `Basic ${auth}` } : {}),
+    ...(workspaceId ? { "X-Workspace-Id": workspaceId } : {}),
     ...(json ? { "Content-Type": "application/json" } : {}),
-  }), [auth]);
+  }), [auth, workspaceId]);
 
   const load = useCallback(async () => {
-    if (!auth) return;
+    if (!auth || !workspaceId) return;
     try {
       const [videoResponse, usageResponse] = await Promise.all([
         fetch(`${API}/videos`, { headers: headers() }),
@@ -68,16 +72,43 @@ export default function DashboardPage() {
       setMessage(error instanceof Error ? error.message : "Could not connect to the local API.");
       setMessageError(true);
     }
-  }, [auth, headers]);
+  }, [auth, headers, workspaceId]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("vc-basic");
     if (saved) setAuth(saved);
     setAuthReady(true);
   }, []);
-  useEffect(() => { if (auth) { sessionStorage.setItem("vc-basic", auth); void load(); } }, [auth, load]);
   useEffect(() => {
-    if (!auth || view !== "analytics") return;
+    if (!auth) { setWorkspaces([]); setWorkspaceId(""); return; }
+    sessionStorage.setItem("vc-basic", auth);
+    let cancelled = false;
+    fetch(`${API}/workspaces`, { headers: { Authorization: `Basic ${auth}` } })
+      .then(async response => {
+        if (!response.ok) throw new Error(`Could not load workspaces (HTTP ${response.status}).`);
+        return await response.json() as Workspace[];
+      })
+      .then(items => {
+        if (cancelled) return;
+        setWorkspaces(items);
+        const saved = localStorage.getItem("vc-workspace-id");
+        const selected = items.find(item => item.id === saved) || (items.length === 1 ? items[0] : null);
+        if (selected) {
+          setWorkspaceId(selected.id);
+          localStorage.setItem("vc-workspace-id", selected.id);
+        } else {
+          setWorkspaceId("");
+          setVideos([]); setUsage(null);
+          setMessage(items.length ? "Select a workspace to view its videos and storage." : "No workspace membership found.");
+          setMessageError(items.length === 0);
+        }
+      })
+      .catch(error => { if (!cancelled) { setMessage(error instanceof Error ? error.message : "Could not load workspaces."); setMessageError(true); } });
+    return () => { cancelled = true; };
+  }, [auth]);
+  useEffect(() => { if (auth && workspaceId) void load(); }, [auth, workspaceId, load]);
+  useEffect(() => {
+    if (!auth || !workspaceId || view !== "analytics") return;
     let cancelled = false;
     fetch(`${API}/analytics`, { headers: headers() }).then(async response => {
       if (!response.ok) throw new Error(`Analytics request failed (HTTP ${response.status}).`);
@@ -85,13 +116,13 @@ export default function DashboardPage() {
     }).then(data => { if (!cancelled) { setAnalytics(data); setAnalyticsError(""); } })
       .catch(error => { if (!cancelled) setAnalyticsError(error instanceof Error ? error.message : "Could not load analytics."); });
     return () => { cancelled = true; };
-  }, [auth, view, headers]);
+  }, [auth, workspaceId, view, headers]);
   // Keep processing status and storage figures current while FFmpeg runs.
   useEffect(() => {
-    if (!auth || !videos.some(video => video.status === "PROCESSING" || video.status === "UPLOADED" || video.status === "QUEUED")) return;
+    if (!auth || !workspaceId || !videos.some(video => video.status === "PROCESSING" || video.status === "UPLOADED" || video.status === "QUEUED")) return;
     const timer = window.setInterval(() => { void load(); }, 4000);
     return () => window.clearInterval(timer);
-  }, [auth, videos, load]);
+  }, [auth, workspaceId, videos, load]);
 
   async function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy) return; setBusy(true); setMessage("");
@@ -104,9 +135,9 @@ export default function DashboardPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message || (response.status === 409 ? "This email already has an account. Please sign in." : `Registration failed (HTTP ${response.status}).`));
       const basic = btoa(`${normalizedEmail}:${password}`);
-      const check = await fetch(`${API}/videos`, { headers: { Authorization: `Basic ${basic}` } });
+      const check = await fetch(`${API}/workspaces`, { headers: { Authorization: `Basic ${basic}` } });
       if (!check.ok) throw new Error("Account created, but sign-in verification failed. Please sign in.");
-      sessionStorage.setItem("vc-basic", basic); setAuth(basic); setVideos(await check.json());
+      sessionStorage.setItem("vc-basic", basic); setAuth(basic); setWorkspaces(await check.json());
       setMessage("Workspace created successfully."); setMessageError(false);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Registration failed."); setMessageError(true); }
     finally { setBusy(false); }
@@ -116,10 +147,10 @@ export default function DashboardPage() {
     event.preventDefault(); if (busy) return; setBusy(true); setMessage("");
     try {
       const basic = btoa(`${email.trim().toLowerCase()}:${password}`);
-      const response = await fetch(`${API}/videos`, { headers: { Authorization: `Basic ${basic}` } });
+      const response = await fetch(`${API}/workspaces`, { headers: { Authorization: `Basic ${basic}` } });
       if (!response.ok) throw new Error(response.status === 401 ? "Email or password is incorrect." : `Sign-in failed (HTTP ${response.status}).`);
-      const list = await response.json(); sessionStorage.setItem("vc-basic", basic);
-      setAuth(basic); setVideos(list); setMessage("Signed in."); setMessageError(false);
+      const items = await response.json() as Workspace[]; sessionStorage.setItem("vc-basic", basic);
+      setAuth(basic); setWorkspaces(items); setMessage(items.length > 1 ? "Signed in. Select a workspace." : "Signed in."); setMessageError(false);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Sign-in failed."); setMessageError(true); }
     finally { setBusy(false); }
   }
@@ -238,7 +269,7 @@ export default function DashboardPage() {
   const storedBytes = usage?.storedBytes ?? 0;
   const storageLimit = 2 * 1024 ** 3;
   const effectiveLimit = usage?.storageLimitBytes ?? storageLimit;
-  const storagePercent = Math.min(100, (storedBytes / Math.max(1,effectiveLimit)) * 100);
+  const storagePercent = Math.min(100, ((storedBytes + (usage?.reservedUploadBytes ?? 0)) / Math.max(1,effectiveLimit)) * 100);
 
   if (!authReady) return <main className="workspace-loading">Loading your workspace…</main>;
 
@@ -283,7 +314,7 @@ export default function DashboardPage() {
         </nav>
         <div className="vc-storage-card">
           <div className="vc-storage-heading"><strong>Storage</strong><span>LOCAL</span></div>
-          <p>{formatBytes(storedBytes)} of {formatBytes(usage?.storageLimitBytes ?? 0)} used</p><div className="vc-progress"><span style={{ width: `${storagePercent}%` }} /></div>
+          <p>{formatBytes(storedBytes + (usage?.reservedUploadBytes ?? 0))} of {formatBytes(usage?.storageLimitBytes ?? 0)} used</p><div className="vc-progress"><span style={{ width: `${storagePercent}%` }} /></div>
           <small>{usage ? "Usage from your original video files" : "Storage usage unavailable"}</small>
           <p className="vc-storage-foot">{usage?.planCode ?? "Plan unavailable"} · {usage?.videoCount ?? videos.length}/{usage?.videoLimit ?? "—"} videos</p>
         </div>
@@ -293,7 +324,7 @@ export default function DashboardPage() {
       <section className="vc-main">
         <header className="vc-topbar">
           <div className="vc-search"><span>⌕</span><input aria-label="Search library" placeholder="Search your library" value={search} onChange={event => setSearch(event.target.value)} /></div>
-          <div className="vc-top-actions"><Link href="/pricing">Plans</Link><button className="vc-primary" onClick={() => { setShowUpload(value => !value); setView("library"); }}>＋ Create / Upload</button><div className="vc-avatar" title="Signed in">VC</div></div>
+          <div className="vc-top-actions">{workspaces.length > 1 && <label className="vc-workspace-picker">Workspace <select aria-label="Active workspace" value={workspaceId} onChange={event => { const id = event.target.value; setWorkspaceId(id); localStorage.setItem("vc-workspace-id", id); setVideos([]); setUsage(null); setAnalytics(null); setShareLinks({}); setMessage("Loading selected workspace…"); setMessageError(false); }}><option value="">Select workspace</option>{workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.name} ({workspace.role})</option>)}</select></label>}<Link href="/pricing">Plans</Link><button className="vc-primary" onClick={() => { setShowUpload(value => !value); setView("library"); }}>＋ Create / Upload</button><div className="vc-avatar" title="Signed in">VC</div></div>
         </header>
 
         <div className="vc-quick-actions">
@@ -310,8 +341,17 @@ export default function DashboardPage() {
           <div><p className="eyebrow">ADD TO YOUR LIBRARY</p><h2>Upload a video</h2><p>Choose a video file. FFmpeg will prepare it for HLS playback in the background.</p></div>
           <form onSubmit={upload} className="vc-upload-form">
             <label htmlFor="video-title">Video title</label><input id="video-title" value={title} onChange={event => setTitle(event.target.value)} maxLength={250} required />
-            <label htmlFor="video-file">Video file</label><input id="video-file" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska" onChange={event => setFile(event.target.files?.[0] || null)} required />
-            {file && <p className="vc-file-selected">{file.name} · {formatBytes(file.size)} · SHA-256 verification and retry enabled</p>}
+            <label htmlFor="video-file">Video file</label>
+            <div className={file ? "vc-file-dropzone has-file" : "vc-file-dropzone"}>
+              <input className="vc-file-input" id="video-file" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska" onChange={event => setFile(event.target.files?.[0] || null)} required aria-describedby="video-file-help" />
+              <span className="vc-file-icon" aria-hidden="true">{file ? "✓" : "↑"}</span>
+              <div className="vc-file-copy">
+                <strong>{file ? file.name : "Choose a video to upload"}</strong>
+                <span>{file ? `${formatBytes(file.size)} · Ready to upload` : "Click to browse your device"}</span>
+              </div>
+              <span className="vc-file-browse">{file ? "Change file" : "Browse files"}</span>
+            </div>
+            <p className="vc-file-help" id="video-file-help">MP4, MOV, WebM or MKV · SHA-256 verification and retry enabled</p>
             {busy && <div className="vc-upload-progress" role="status"><div className="vc-progress"><span style={{ width: `${uploadProgress}%` }} /></div><small>{uploadProgress}% uploaded</small></div>}
             <div className="vc-upload-actions"><button type="button" className="vc-secondary" onClick={() => setShowUpload(false)}>Cancel</button><button className="vc-primary" disabled={busy || !file}>{busy ? "Uploading…" : "Upload video"}</button></div>
           </form>
@@ -334,7 +374,7 @@ export default function DashboardPage() {
           <div className="vc-library-summary"><span>{filteredVideos.length} {filteredVideos.length === 1 ? "video" : "videos"}</span><span>{formatBytes(storedBytes)} stored</span></div>
           {filteredVideos.length === 0 ? <div className="vc-empty-state"><div className="vc-empty-icon">⇧</div><h2>{search ? "No matching videos" : "Your video library starts here"}</h2><p>{search ? "Try another search term." : "Upload your first video to start building a branded, shareable library."}</p>{!search && <button className="vc-primary" onClick={() => setShowUpload(true)}>＋ Upload your first video</button>}</div> :
             <div className="vc-video-grid">{filteredVideos.map(video => <article className="vc-video-card" key={video.id}>
-              <div className="vc-video-preview">{video.status === "READY" ? <VideoPlayer videoId={video.id} auth={auth} /> : <div className="vc-processing"><span>{video.status === "FAILED" ? "!" : "◷"}</span><strong>{video.status === "FAILED" ? "Processing failed" : "Preparing your video"}</strong><small>{video.status}</small></div>}</div>
+              <div className="vc-video-preview">{video.status === "READY" ? <VideoPlayer videoId={video.id} auth={auth} workspaceId={workspaceId} /> : <div className="vc-processing"><span>{video.status === "FAILED" ? "!" : "◷"}</span><strong>{video.status === "FAILED" ? "Processing failed" : "Preparing your video"}</strong><small>{video.status}</small></div>}</div>
               <div className="vc-video-details"><div className="vc-video-title-row"><h2 title={video.title}>{video.title}</h2><span className={video.status === "READY" ? "vc-status ready" : video.status === "FAILED" ? "vc-status failed" : "vc-status"}>{video.status}</span></div>
                 <p className="vc-video-meta">{new Date(video.createdAt).toLocaleDateString()} · {video.visibility}</p>
                 <div className="vc-video-actions"><label className="vc-visibility-label" htmlFor={`visibility-${video.id}`}>Access</label><select id={`visibility-${video.id}`} value={video.visibility} onChange={event => void changeVisibility(video, event.target.value)}><option>PRIVATE</option><option>UNLISTED</option><option>PUBLIC</option></select><button className="vc-icon-button" title="Create share link" onClick={() => void createShare(video)}>↗ Share</button><button className="vc-icon-button danger" title="Delete video" onClick={() => void remove(video)}>⌫</button></div>

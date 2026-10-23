@@ -3,15 +3,15 @@ import {useEffect,useRef,useState} from "react";
 import Hls from "hls.js";
 const API=process.env.NEXT_PUBLIC_API_BASE_URL||"http://localhost:8080/api/v1";
 type PlaybackEvent = "PLAY" | "PAUSE" | "COMPLETE" | "ERROR";
-export default function VideoPlayer({videoId,auth,sourcePath}:{videoId:string;auth:string;sourcePath?:string}){
- const ref=useRef<HTMLVideoElement>(null);const [error,setError]=useState("");
+export default function VideoPlayer({videoId,auth,workspaceId,sourcePath}:{videoId:string;auth:string;workspaceId:string;sourcePath?:string}){
+ const ref=useRef<HTMLVideoElement>(null);const lastReportedTime=useRef(0);const [error,setError]=useState("");
  useEffect(()=>{
   const video=ref.current;if(!video)return;
   const relativePath=sourcePath?.startsWith("/api/v1/")?sourcePath.slice("/api/v1".length):sourcePath;
   const url=relativePath?`${API}${relativePath}`:`${API}/videos/${videoId}/assets/index.m3u8`;
   let hls:Hls|undefined;
   if(Hls.isSupported()){
-   hls=new Hls({xhrSetup:(xhr)=>{if(auth)xhr.setRequestHeader("Authorization",`Basic ${auth}`);}});
+   hls=new Hls({xhrSetup:(xhr)=>{if(auth)xhr.setRequestHeader("Authorization",`Basic ${auth}`);if(workspaceId)xhr.setRequestHeader("X-Workspace-Id",workspaceId);}});
    hls.loadSource(url);hls.attachMedia(video);
    hls.on(Hls.Events.ERROR,(_,data)=>{if(data.fatal){setError("Playback failed. Refresh processing status and check FFmpeg output.");sendEvent("ERROR");}});
   } else if(video.canPlayType("application/vnd.apple.mpegurl")){
@@ -27,7 +27,7 @@ export default function VideoPlayer({videoId,auth,sourcePath}:{videoId:string;au
    }catch{return;}
    void fetch(`${API}/analytics/videos/${videoId}/events`,{
     method:"POST",
-    headers:{"Content-Type":"application/json",Authorization:`Basic ${auth}`},
+    headers:{"Content-Type":"application/json",Authorization:`Basic ${auth}`,"X-Workspace-Id":workspaceId},
     body:JSON.stringify({eventType,watchedSeconds:Math.max(0,Math.min(86400,Math.floor(watchedSeconds))),viewerKey}),
     keepalive:true
    }).catch(()=>{});
@@ -37,6 +37,6 @@ export default function VideoPlayer({videoId,auth,sourcePath}:{videoId:string;au
   const onEnded=()=>sendEvent("COMPLETE");
   video.addEventListener("play",onPlay);video.addEventListener("pause",onPause);video.addEventListener("ended",onEnded);
   return()=>{video.removeEventListener("play",onPlay);video.removeEventListener("pause",onPause);video.removeEventListener("ended",onEnded);hls?.destroy();};
- },[videoId,auth,sourcePath]);
+ },[videoId,auth,workspaceId,sourcePath]);
  return <div><video ref={ref} controls preload="metadata" width="100%" aria-label="Video playback"/>{error&&<p role="status">{error}</p>}</div>;
 }
