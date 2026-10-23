@@ -8,7 +8,7 @@ type Video = {
   id: string; title: string; description: string | null; visibility: string;
   status: string; durationSeconds: number | null; createdAt: string;
 };
-type Usage = { videoCount: number; storedBytes: number; billingMode: string; note?: string };\ntype Analytics = { periodDays: number; summary: { plays: number; completions: number; unique_viewers: number; watch_seconds: number }; daily: { day: string; plays: number; unique_viewers: number; watch_seconds: number }[]; videos: { id: string; title: string; plays: number; unique_viewers: number; watch_seconds: number }[]; note: string };
+type Usage = { videoCount: number; storedBytes: number; reservedUploadBytes?: number; storageLimitBytes?: number; availableBytes?: number; videoLimit?: number; planCode?: string; billingMode: string; note?: string };\ntype Analytics = { periodDays: number; summary: { plays: number; completions: number; unique_viewers: number; watch_seconds: number }; daily: { day: string; plays: number; unique_viewers: number; watch_seconds: number }[]; videos: { id: string; title: string; plays: number; unique_viewers: number; watch_seconds: number }[]; note: string };
 const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/v1";
 const formatBytes = (bytes: number) => {
   if (!bytes) return "0 B";
@@ -32,7 +32,7 @@ export default function DashboardPage() {
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [messageError, setMessageError] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false);\n  const [uploadProgress, setUploadProgress] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
@@ -112,13 +112,49 @@ export default function DashboardPage() {
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!file || !title.trim() || busy) return;
-    setBusy(true); setMessage("Uploading video… processing will continue in the background."); setMessageError(false);
-    const body = new FormData(); body.append("file", file); body.append("title", title.trim());
+    setBusy(true); setUploadProgress(0); setMessage("Preparing resumable upload…"); setMessageError(false);
     try {
-      const response = await fetch(`${API}/videos`, { method: "POST", headers: headers(), body });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.message || `Upload failed (HTTP ${response.status}).`);
-      setMessage("Upload accepted. Video processing has started."); setTitle(""); setFile(null); setShowUpload(false);
+      const sha256 = async (blob: Blob) => {
+        const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+        return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+      };
+      const fileSha = await sha256(file);
+      const start = await fetch(`${API}/uploads/resumable`, {
+        method: "POST", headers: headers(true),
+        body: JSON.stringify({ title: title.trim(), sizeBytes: file.size, contentType: file.type || "video/mp4", filename: file.name, sha256: fileSha })
+      });
+      const session = await start.json().catch(() => ({}));
+      if (!start.ok) throw new Error(session.message || `Could not start upload (HTTP ${start.status}).`);
+      const chunkSize = Number(session.chunkSizeBytes);
+      const chunks = Number(session.chunkCount);
+      for (let index = 0; index < chunks; index++) {
+        const chunk = file.slice(index * chunkSize, Math.min(file.size, (index + 1) * chunkSize));
+        const chunkSha = await sha256(chunk);
+        let lastError: Error | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const response = await fetch(`${API}/uploads/resumable/${session.uploadId}/chunks/${index}`, {
+              method: "PUT", headers: { ...headers(), "Content-Type": "application/octet-stream", "X-Chunk-SHA256": chunkSha }, body: chunk
+            });
+            if (!response.ok) {
+              const data = await response.json().catch(() => ({}));
+              if (response.status < 500 && response.status !== 429) throw new Error(data.message || `Chunk ${index + 1} failed (HTTP ${response.status}).`);
+              throw new Error(data.message || `Temporary upload error (HTTP ${response.status}).`);
+            }
+            lastError = null; break;
+          } catch (error) {
+            lastError = error instanceof Error ? error : new Error("Chunk upload failed");
+            if (attempt < 2) await new Promise(resolve => window.setTimeout(resolve, 400 * (attempt + 1)));
+          }
+        }
+        if (lastError) throw new Error(`Chunk ${index + 1}/${chunks} could not be uploaded. Your upload session is retained for retry: ${lastError.message}`);
+        setUploadProgress(Math.round(((index + 1) / chunks) * 100));
+        setMessage(`Uploading video… ${Math.round(((index + 1) / chunks) * 100)}%`);
+      }
+      const complete = await fetch(`${API}/uploads/resumable/${session.uploadId}/complete`, { method: "POST", headers: headers() });
+      const result = await complete.json().catch(() => ({}));
+      if (!complete.ok) throw new Error(result.message || `Could not complete upload (HTTP ${complete.status}).`);
+      setMessage("Upload verified. Video processing has started."); setTitle(""); setFile(null); setShowUpload(false); setUploadProgress(0);
       await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Upload failed."); setMessageError(true); }
     finally { setBusy(false); }
@@ -158,7 +194,7 @@ export default function DashboardPage() {
     .sort((a, b) => sort === "title" ? a.title.localeCompare(b.title) : sort === "oldest" ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt)), [videos, search, sort]);
   const storedBytes = usage?.storedBytes ?? 0;
   const storageLimit = 2 * 1024 ** 3;
-  const storagePercent = Math.min(100, (storedBytes / storageLimit) * 100);
+  const effectiveLimit = usage?.storageLimitBytes ?? storageLimit;\n  const storagePercent = Math.min(100, (storedBytes / Math.max(1,effectiveLimit)) * 100);
 
   if (!authReady) return <main className="workspace-loading">Loading your workspace…</main>;
 
@@ -203,9 +239,9 @@ export default function DashboardPage() {
         </nav>
         <div className="vc-storage-card">
           <div className="vc-storage-heading"><strong>Storage</strong><span>LOCAL</span></div>
-          <p>{formatBytes(storedBytes)} used</p><div className="vc-progress"><span style={{ width: `${storagePercent}%` }} /></div>
+          <p>{formatBytes(storedBytes)} of {formatBytes(usage?.storageLimitBytes ?? 0)} used</p><div className="vc-progress"><span style={{ width: `${storagePercent}%` }} /></div>
           <small>{usage ? "Usage from your original video files" : "Storage usage unavailable"}</small>
-          <p className="vc-storage-foot">Storage allowance is not yet enforced.</p>
+          <p className="vc-storage-foot">{usage?.planCode ?? "Plan unavailable"} · {usage?.videoCount ?? videos.length}/{usage?.videoLimit ?? "—"} videos</p>
         </div>
         <button className="vc-side-link vc-logout" onClick={() => { sessionStorage.removeItem("vc-basic"); setAuth(""); setVideos([]); setUsage(null); }}><span className="vc-nav-icon">↪</span><span className="vc-nav-label">Sign out</span></button>
       </aside>
@@ -231,7 +267,7 @@ export default function DashboardPage() {
           <form onSubmit={upload} className="vc-upload-form">
             <label htmlFor="video-title">Video title</label><input id="video-title" value={title} onChange={event => setTitle(event.target.value)} maxLength={250} required />
             <label htmlFor="video-file">Video file</label><input id="video-file" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska" onChange={event => setFile(event.target.files?.[0] || null)} required />
-            {file && <p className="vc-file-selected">{file.name} · {formatBytes(file.size)}</p>}
+            {file && <p className="vc-file-selected">{file.name} · {formatBytes(file.size)} · SHA-256 verification and retry enabled</p>}\n            {busy && <div className="vc-upload-progress" role="status"><div className="vc-progress"><span style={{ width: `${uploadProgress}%` }} /></div><small>{uploadProgress}% uploaded</small></div>}
             <div className="vc-upload-actions"><button type="button" className="vc-secondary" onClick={() => setShowUpload(false)}>Cancel</button><button className="vc-primary" disabled={busy || !file}>{busy ? "Uploading…" : "Upload video"}</button></div>
           </form>
         </section>}
