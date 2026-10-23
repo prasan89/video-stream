@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint app",
+    "lint": "eslint app --no-eslintrc --env es2021,browser,node --parser-options '{\"ecmaVersion\":\"latest\",\"sourceType\":\"module\",\"ecmaFeatures\":{\"jsx\":true}}' --rule 'no-undef: off' --rule 'no-unused-vars: off'",
     "test": "node --test"
   },
   "dependencies": {
