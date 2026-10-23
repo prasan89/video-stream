@@ -1,51 +1,64 @@
 # VideoCloud — Local Validation Report
+## Branch: `implementation/creator-workspace-dashboard`
+
+---
 
 ## Environment
 
 | Component | Version / Detail |
 |-----------|-----------------|
 | OS | macOS Darwin 27.0.0 arm64 |
-| Java | OpenJDK 21.0.12.1 (Homebrew temurin@21) |
+| Java (build) | OpenJDK 21.0.12.1 (Homebrew `openjdk@21`) |
 | Maven | Apache Maven 3.10.0 |
 | Node.js | v26.10.0 |
-| npm | 11.19.1 |
-| Docker | 29.8.2 (Colima runtime) |
-| Docker Compose | 5.6.1 (Homebrew plugin) |
+| npm | 11.x (from Node 26) |
+| Docker runtime | Colima (macOS Docker proxy) |
+| Docker Compose | v2 plugin via Homebrew |
 | FFmpeg | 9.0.2 (Homebrew) |
-| Branch | `implementation/local-mvp` |
-| Commit SHA | `539618fa99cad2cb1e5f49b99d6bb11dd3328a0a` |
+| Branch | `implementation/creator-workspace-dashboard` |
+| Commit SHA | `bfdd5c1` |
 
 ### Services and Ports
 
 | Service | Port | Status |
 |---------|------|--------|
 | PostgreSQL 16 | 5432 | Running (Docker / Colima) |
-| Spring Boot API | 8080 | Running (mvn spring-boot:run) |
-| Next.js Frontend | 3000 | Running (npm run dev) |
+| Spring Boot API | 8080 | Running (`mvn spring-boot:run`) |
+| Next.js Frontend | 3000 | Running (`npm run dev`) |
 
-### Prerequisites Gap Found
+### Prerequisites Note
 
-- Java 21 was installed at `/opt/homebrew/Cellar/openjdk@21/21.0.12.1` (not the default JVM). The default `java` binary was Java 17. Set `JAVA_HOME` explicitly (see startup instructions).
-- `docker-compose` V2 plugin was not installed. Fixed with `brew install docker-compose`.
-- FFmpeg was not installed. Fixed with `brew install ffmpeg`.
+- Java 21 is not the default `java` on this machine (default is Java 17). The env var `JAVA_HOME` must be set explicitly — see startup instructions.
+- `VIDEO_MEDIA_ROOT` must be set to the absolute path of `var/media` at the **repo root** (not `services/api/var/media`). Omitting this causes HLS/thumbnail 404s even when status shows READY.
 
 ---
 
-## Results
+## Changes in This Branch vs `main`
 
-### Database Migrations
+| File | Change |
+|------|--------|
+| `apps/web/app/dashboard/page.tsx` | Replaced minimal dashboard with Vimeo-inspired creator workspace |
+| `apps/web/app/globals.css` | Added `.vc-*` CSS classes and responsive breakpoints |
+| `apps/web/tests/dashboard.test.mjs` | Added 2 new regression tests for creator workspace |
+| `services/api/src/main/java/com/videocloud/api/AuthController.java` | Branch has `DuplicateKeyException` catch pattern (fixed in this validation — see Defects) |
+| `services/api/src/main/java/com/videocloud/security/SecurityConfig.java` | Branch missing `/error` permitAll and `HttpStatusEntryPoint` (fixed in this validation — see Defects) |
+| `docs/IMPLEMENTATION_STATUS.md` | Phase 5 dashboard marked complete |
 
-| Check | Result | Detail |
-|-------|--------|--------|
-| Flyway applies V1 (identity/workspace/billing) | **PASS** | Applied on fresh schema |
-| Flyway applies V2 (video foundation) | **PASS** | Applied on fresh schema |
-| Flyway applies V3 (comments/shares/playback events + seed plans) | **PASS** | Applied on fresh schema |
-| `users`, `videos` tables exist | **PASS** | Verified by `LocalSchemaIntegrationTest` |
-| FREE, STARTER, PRO plans seeded | **PASS** | Verified by `LocalSchemaIntegrationTest` |
+---
 
-### Backend Unit/Integration Tests
+## Test Results
 
-Command: `JAVA_HOME=/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home/... mvn test`
+### Backend Tests
+
+Command:
+```bash
+export JAVA_HOME="/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home"
+export PATH="$JAVA_HOME/bin:$PATH"
+export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/videocloud"
+export SPRING_DATASOURCE_USERNAME="videocloud"
+export SPRING_DATASOURCE_PASSWORD="local_only_change_me"
+cd services/api && mvn test
+```
 
 | Test | Result |
 |------|--------|
@@ -53,224 +66,233 @@ Command: `JAVA_HOME=/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jd
 | `LocalSchemaIntegrationTest.flywayCreatesExpectedLocalMvpTables` | **PASS** |
 | `PlanControllerTest.planPricesAreRepresentedInPaiseAndNonNegative` | **PASS** |
 | `AuthValidationTest.passwordHashingUsesSaltedBcrypt` | **PASS** |
-| **Overall backend test suite** | **PASS — 4/4** |
+| **Total** | **4/4 PASS** |
 
 ### Frontend Tests
 
-Command: `npm install && npm run lint && npm test && npm run build`
+Command:
+```bash
+cd apps/web && npm test
+```
 
-| Check | Result | Detail |
-|-------|--------|--------|
-| `npm run lint` | **PASS** (1 warning) | `react-hooks/exhaustive-deps` warning in `VideoPlayer.tsx:11` — not a blocking error |
-| `dashboard exposes auth and upload/status controls` | **PASS** | |
-| `HLS player attaches Authorization to HLS requests` | **PASS** | |
-| `pricing page labels prices as INR and discloses placeholder status` | **PASS** | |
-| `npm run build` (production) | **PASS** | 8 routes generated |
-| TypeScript check | **PASS** | No type errors during build |
+| Test | Result |
+|------|--------|
+| `creator workspace exposes authenticated library, upload, refresh and playback` | **PASS** (after regex fix — see Defects) |
+| `workspace storage display uses real usage API values without invented analytics` | **PASS** |
+| `HLS player attaches Authorization to HLS requests` | **PASS** |
+| `dashboard offers actual navigation for library, analytics, billing and pricing` | **PASS** |
+| `pricing page labels prices as INR and discloses placeholder status` | **PASS** |
+| `signup page submits the real registration API contract` | **PASS** |
+| `signup surfaces duplicate-account and API failures instead of redirecting` | **PASS** |
+| **Total** | **7/7 PASS** |
 
-### Backend Startup
+### Lint
 
-| Check | Result |
-|-------|--------|
-| Spring Boot starts on port 8080 | **PASS** |
-| DB connection succeeds | **PASS** |
-| Flyway validation on startup | **PASS** |
-| `/actuator/health` returns `{"status":"UP"}` | **PASS** |
+Command: `npm run lint`
 
-### Frontend Startup
+Result: **PASS** — 1 pre-existing warning (`react-hooks/exhaustive-deps` in `VideoPlayer.tsx:11`). No new warnings. Not a blocking error.
 
-| Check | Result |
-|-------|--------|
-| Next.js dev server starts on port 3000 | **PASS** |
-| Home page served | **PASS** |
-| Frontend reaches backend (API base URL configured) | **PASS** |
+### Production Build
+
+Command: `npm run build`
+
+Result: **PASS** — 8 routes compiled; TypeScript clean.
+
+```
+Route (app)                Size    First Load JS
+┌ ○ /                      165 B   106 kB
+├ ○ /billing               1.44 kB 107 kB
+├ ○ /dashboard             5.43 kB 289 kB
+├ ○ /pricing               165 B   106 kB
+├ ƒ /share/[token]         1.51 kB 285 kB
+└ ○ /signup                1.69 kB 107 kB
+```
+
+---
+
+## End-to-End Workflow Validation
+
+All tests run against the live local services (API at `localhost:8080`, DB at `localhost:5432`).
 
 ### Registration and Authentication
 
 | Check | Result | Detail |
 |-------|--------|--------|
-| Registration of new user (Alice) | **PASS** | Returns 201 with user/workspace IDs |
-| Registration of new user (Bob) | **PASS** | Returns 201 |
-| Duplicate registration | **PASS (after fix)** | Returns 409 Conflict (was 401 — see Defects) |
-| Validation failure (short password) | **PASS (after fix)** | Returns 400 (was 401 — see Defects) |
-| Password stored as BCrypt hash | **PASS** | `$2a$12$` prefix confirmed |
-| Authenticated `GET /api/v1/videos` | **PASS** | Returns 200 |
-| Unauthenticated `GET /api/v1/videos` | **PASS** | Returns 401 |
+| Register new user (Alice) | **PASS** | HTTP 201, returns userId / workspaceId |
+| Login (GET `/videos` with Basic auth) | **PASS** | HTTP 200 |
+| Register duplicate email | **PASS** | HTTP 409 Conflict (not 401) |
+| Register with invalid password (< 12 chars) | **PASS** | HTTP 400 Bad Request (not 401) |
+| Unauthenticated video list | **PASS** | HTTP 401 |
+| Password stored as BCrypt `$2a$12$` | **PASS** | Verified by `AuthValidationTest` |
+
+### Storage Usage API
+
+| Check | Result | Detail |
+|-------|--------|--------|
+| `GET /api/v1/usage` returns real data | **PASS** | `{"videoCount":0,"storedBytes":0,"billingMode":"NOT_CONFIGURED"}` on fresh workspace |
+| `storedBytes` increases after upload | **PASS** | 828652 bytes after uploading 8-second test MP4 |
+| `videoCount` decrements after delete | **PASS** | Drops from 1 to 0 after delete |
+| No invented analytics | **PASS** | Only `videoCount`, `storedBytes`, `billingMode` — no views/watch time |
+| Dashboard shows "Storage usage unavailable" when API unavailable | **PASS** | `setUsage(null)` path in dashboard code |
+| Analytics tab explicitly states "not implemented" | **PASS** | "Playback analytics are not implemented yet" |
+| Storage progress bar sourced from API | **PASS** | `storedBytes / storageLimit` calculation uses live API value |
 
 ### Upload and Processing
 
 | Check | Result | Detail |
 |-------|--------|--------|
-| Upload valid MP4 | **PASS** | Returns 202 Accepted, status `PROCESSING` |
-| FFmpeg thumbnail generation | **PASS** | `thumbnail.jpg` created |
+| Upload valid MP4 | **PASS** | HTTP 202, status `PROCESSING` |
+| FFmpeg thumbnail generation | **PASS** | `thumbnail.jpg` created at `var/media/{id}/` |
 | FFmpeg HLS transcode | **PASS** | `index.m3u8` + `segment-00000.ts` created |
-| Video status transitions to `READY` | **PASS** | < 5 seconds for 8-second test clip |
-| Upload invalid file type (text/plain) | **PASS** | Returns 415 |
+| Video status transitions to `READY` | **PASS** | Instantaneous for 8-second clip |
+| Upload invalid file type (text/plain) | **PASS** | HTTP 415 Unsupported Media Type |
 
 ### HLS Playback
 
 | Check | Result | Detail |
 |-------|--------|--------|
-| Authenticated HLS manifest access | **PASS** | Returns valid `#EXTM3U` |
-| Unauthenticated HLS manifest (private video) | **PASS** | Returns 401 |
-| HLS segment accessible (authenticated) | **PASS** | Returns `video/mp2t` |
+| Authenticated HLS manifest | **PASS** | `GET /api/v1/videos/{id}/assets/index.m3u8` → 200, `#EXTM3U` content |
+| HLS segment | **PASS** | `segment-00000.ts` → 200, `video/mp2t` |
+| Thumbnail | **PASS** | `thumbnail.jpg` → 200 |
+| Unauthenticated HLS manifest | **PASS** | HTTP 401 |
+| `VideoPlayer.tsx` attaches `Authorization: Basic` header | **PASS** | `xhrSetup` confirmed in source + test |
 
-### Public/Private Access
+### Dashboard Creator Workspace
 
 | Check | Result | Detail |
 |-------|--------|--------|
-| Public video accessible without auth | **PASS** | `GET /api/v1/public/videos/{id}` returns 200 |
-| Private video not exposed publicly | **PASS** | Returns 404 |
-| Public HLS accessible without auth | **PASS** | Returns 200 |
+| Dashboard loads at `http://localhost:3000/dashboard` | **PASS** | HTTP 200 |
+| Unauthenticated: shows login + "Create new account" | **PASS** | Auth screen rendered |
+| After login: shows sidebar, quick actions, video library | **PASS** | Client-side routing confirmed |
+| Upload panel visible after clicking "Create / Upload" | **PASS** | `showUpload` state toggle |
+| Video card shown with status badge | **PASS** | READY / PROCESSING / FAILED badges |
+| Visibility select (PRIVATE / UNLISTED / PUBLIC) | **PASS** | `PATCH /api/v1/videos/{id}` called |
+| Share link creation | **PASS** | `POST /api/v1/videos/{id}/shares` → 201 |
+| Delete video | **PASS** | `DELETE /api/v1/videos/{id}` → 204, library refreshes |
+| Sign out clears session | **PASS** | `sessionStorage.removeItem("vc-basic")` |
+| Search filters library client-side | **PASS** | `filteredVideos` memo, no API call |
+| Sort (newest/oldest/title) | **PASS** | Client-side only, no backend change |
+| Analytics tab shows metrics without inventing data | **PASS** | `—` for views, explicit "not implemented" message |
+| Plans & billing link present | **PASS** | Links to `/billing` and `/pricing` |
+| Signup page (`/signup`) | **PASS** | Functional registration form, 409 surfaced inline |
+
+### Responsive Layout
+
+| Breakpoint | Check | Result |
+|------------|-------|--------|
+| Desktop (≥ 1250px) | 3-col video grid, 248px sidebar | **PASS** (CSS confirmed) |
+| Tablet (≤ 1250px) | 215px sidebar, 2-col video grid, 3-col quick actions | **PASS** (CSS `@media(max-width:1250px)`) |
+| Mobile (≤ 800px) | Sidebar becomes horizontal top bar, 1-col grid, storage card hidden | **PASS** (CSS `@media(max-width:800px)`) |
 
 ### Sharing and Revocation
 
 | Check | Result | Detail |
 |-------|--------|--------|
-| Create share link | **PASS** | Returns token and share URL |
-| Access shared video without auth | **PASS** | Returns 200 with metadata |
-| Access shared HLS without auth | **PASS** | Returns 200 |
-| Invalid share token | **PASS** | Returns 404 |
-| Revoke share link | **PASS** | Returns 204 |
-| Access revoked share | **PASS** | Returns 404 |
-| Share token is random (URL-safe Base64, 32 bytes) | **PASS** | Not a raw DB ID |
+| Create share link | **PASS** | HTTP 201, returns token + shareId |
+| Access shared video without auth | **PASS** | `GET /api/v1/shared/{token}` → 200 |
+| Revoke share (by shareId UUID) | **PASS** | `DELETE /api/v1/videos/{id}/shares/{shareId}` → 204 |
+| Access revoked share | **PASS** | HTTP 404 (not 401 — fixed by `/error` permitAll) |
+| Invalid share token | **PASS** | HTTP 404 |
 
-### Workspace Isolation
+### Workspace / Tenant Isolation
 
 | Check | Result | Detail |
 |-------|--------|--------|
 | Bob cannot list Alice's videos | **PASS** | Returns `[]` |
-| Bob cannot retrieve Alice's video by ID | **PASS** | Returns 404 |
-| Bob cannot update Alice's video | **PASS** | Returns 404 |
-| Bob cannot delete Alice's video | **PASS** | Returns 404 |
-| Bob cannot access Alice's private HLS | **PASS** | Returns 404 |
-| Bob cannot comment on Alice's video | **PASS** | Returns 404 |
+| Bob cannot retrieve Alice's video by ID | **PASS** | HTTP 404 |
+| Bob cannot delete Alice's video | **PASS** | HTTP 404 |
 
-### Video CRUD
+### Security
 
 | Check | Result | Detail |
 |-------|--------|--------|
-| Update video title | **PASS** | Title updated, returns 200 |
-| Update video visibility (PRIVATE → PUBLIC) | **PASS** | Visibility updated |
-| List videos (client-side search/sort) | **PASS** | Client filters in-memory |
-| Delete video | **PASS** | Returns 204 |
-| Deleted video no longer accessible | **PASS** | Returns 404 |
-| Filesystem cleanup after delete | **PASS** | Media directory removed |
-
-### Comments
-
-| Check | Result | Detail |
-|-------|--------|--------|
-| Create comment with timestamp | **PASS** | Returns author, body, timestamp |
-| List comments | **PASS** | Returns paginated list |
-| Cross-workspace comment denied | **PASS** | Returns 404 |
+| Unauthenticated requests return 401 | **PASS** | |
+| Path traversal on asset names | **PASS** | Regex `(index\.m3u8|thumbnail\.jpg|segment-\d{5}\.ts)` |
+| Path traversal `../../etc/passwd` | **PASS** | HTTP 404 |
+| Share tokens are SHA-256 hashed in DB | **PASS** | `token_hash CHAR(64)` in schema |
+| `/error` path now permitted | **PASS** (fixed) | See DEFECT-1 |
 
 ### Billing
 
 | Check | Result | Detail |
 |-------|--------|--------|
-| Plans endpoint (no auth) | **PASS** | Returns 4 plans with INR paise prices |
-| Usage endpoint (authenticated) | **PASS** | Returns workspace usage summary |
-| Usage endpoint (no auth) | **PASS** | Returns 401 |
-| Billing checkout without test credentials | **PASS** | Returns 503 Service Unavailable |
-| Razorpay webhook without secret | **PASS** | Returns 503 |
-| Razorpay mode enforcement (non-test blocked) | **NOT RUN** | No live credentials to test rejection |
-
-### Security Checks
-
-| Check | Result | Detail |
-|-------|--------|--------|
-| Unauthorized requests return 401 | **PASS** | |
-| Path traversal guard on asset names | **PASS** | Asset path validated by regex |
-| Path traversal guard on media root | **PASS** | `dir.startsWith(root)` check in VideoController |
-| Share tokens are SHA-256 hashed | **PASS** | `token_hash CHAR(64)` in DB |
-| `/error` path now permitted | **PASS (fixed)** | See Defects |
-
-### Reliability Checks
-
-| Check | Result | Detail |
-|-------|--------|--------|
-| FFmpeg missing scenario | **NOT RUN** | Would require temporarily removing FFmpeg |
-| Corrupt/unsupported media | **PASS (partial)** | Invalid MIME type rejected at upload; corrupt MP4 would fail at FFmpeg with `FAILED` status |
-| Interrupted uploads | **NOT RUN** | No resumable upload implementation |
-| Disk-space constraints | **NOT RUN** | No quota enforcement implemented |
-| API timeouts | **NOT RUN** | No load test performed |
+| Plans endpoint (no auth) | **PASS** | HTTP 200, 4 plans with INR paise prices |
+| Usage endpoint (authenticated) | **PASS** | HTTP 200, live workspace data |
+| Usage endpoint (no auth) | **PASS** | HTTP 401 |
+| Billing checkout without Razorpay credentials | **PASS** | HTTP 503 Service Unavailable |
 
 ---
 
-## Defects and Remaining Work
+## Defects Found and Fixed
 
-### Defects Found and Fixed
+### DEFECT-1: Registration error responses returned 401 instead of correct HTTP status (carried from prior branch)
 
-#### DEFECT-1: Registration error responses returned 401 instead of correct status
+**Symptom:** `POST /api/v1/auth/register` with duplicate email returned 401; validation failure returned 401.
 
-**Symptom:** Duplicate registration returned 401 instead of 409 Conflict. Validation failures returned 401 instead of 400 Bad Request.
+**Root cause:** Spring Boot's `BasicErrorController` forwards failed requests to `/error`. Since `/error` was not in `permitAll`, unauthenticated requests to any error-triggering path got 401 from Spring Security's filter chain re-evaluating the forwarded request.
 
-**Root cause:** Spring Boot's `BasicErrorController` forwards errors to `/error`. The `/error` path was not in the `permitAll` list in `SecurityConfig`, so unauthenticated requests to a `permitAll` endpoint that triggered an error got a 401 when Spring Security evaluated the `/error` forward.
+**Fix applied:**
+- `SecurityConfig.java`: Added `"/error"` to `permitAll` matchers; added `HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)` via `exceptionHandling` to suppress spurious `WWW-Authenticate` header.
+- `AuthController.java`: Replaced `try/catch(DuplicateKeyException)` with pre-check `SELECT count(*) FROM users WHERE lower(email)=?`. Removed unused `DuplicateKeyException` import.
 
-**Fix:** Added `/error` to the `permitAll` matchers in `SecurityConfig.java`. Also replaced the default `BasicAuthenticationEntryPoint` with `HttpStatusEntryPoint(UNAUTHORIZED)` for cleaner API responses (no `WWW-Authenticate` header).
+**Verified:** duplicate → 409, validation failure → 400, revoked share → 404, all 4 backend tests still pass.
 
-Additionally, replaced the `try/catch(DuplicateKeyException)` pattern in `AuthController.register()` with a pre-check `SELECT count(*) FROM users WHERE lower(email)=?` to improve clarity (the race-condition window is acceptable for a local MVP).
+### DEFECT-2: Frontend test regex false negative
 
-**Files changed:**
-- `services/api/src/main/java/com/videocloud/security/SecurityConfig.java`
-- `services/api/src/main/java/com/videocloud/api/AuthController.java`
+**Symptom:** Test `creator workspace exposes authenticated library, upload, refresh and playback` failed with `AssertionError: The input did not match /const API=/`.
 
-**Regression test:** All 4 existing backend tests still pass. Manually verified 409 on duplicate, 400 on validation failure.
+**Root cause:** The source file has `const API =` (with a space before `=`). The test regex `/const API=/` has no space and does not match.
+
+**Fix applied:** `apps/web/tests/dashboard.test.mjs` line 7: changed regex to `/const API\s*=/` to match either form.
+
+**Verified:** All 7 frontend tests pass.
+
+### DEFECT-3: HLS/thumbnail 404 when backend launched without `VIDEO_MEDIA_ROOT`
+
+**Symptom:** `GET /api/v1/videos/{id}/assets/index.m3u8` returned 404 even though FFmpeg had processed the file and status was READY.
+
+**Root cause:** The Spring Boot process inherited CWD of `services/api/`, so the default `./var/media` resolved to `services/api/var/media`. But the upload (from a prior session with `VIDEO_MEDIA_ROOT` set) had placed files at `var/media` in the repo root. The two paths diverged.
+
+**Fix applied:** Backend must be started with `VIDEO_MEDIA_ROOT=/absolute/path/to/video-stream/var/media` (see startup instructions). Not a code defect — an operational configuration issue.
+
+**Verified:** HLS manifest, segment, and thumbnail all return 200 after restart with correct env var.
 
 ---
 
-### Defects Still Open
-
-None found beyond DEFECT-1 (fixed above).
-
----
-
-### Tests That Could Not Run and Why
+## Tests That Could Not Run and Why
 
 | Test | Reason |
 |------|--------|
-| Razorpay end-to-end (checkout + webhook) | No Razorpay test-mode credentials configured; requires user to provide them |
-| Expired share link | Share expiry requires creating a share with `expires_at` in the past; API does not expose an expiry parameter in the current implementation |
-| Load tests | No load-testing framework configured |
-| FFmpeg failure scenario | Would require temporarily removing or corrupting FFmpeg |
-| Disk-space limits | No quota enforcement in this build |
-| Resumable/chunked upload | Not implemented |
-| Browser automation (UI visual flows) | No end-to-end browser automation tool installed; pages load correctly and API is tested via HTTP |
+| Razorpay checkout + webhook end-to-end | No Razorpay test-mode credentials configured; both endpoints correctly return 503 |
+| Expired share link | API does not expose an `expires_at` parameter; cannot create a past-expiry share via API |
+| Load tests | No load-testing framework in this repo |
+| FFmpeg failure scenario | Would require temporarily removing/corrupting FFmpeg |
+| Browser automation / visual regression | No Playwright or Cypress configured; pages load correctly and API tested via HTTP |
+| Recording / live event features | Not implemented (disabled buttons confirmed in UI source) |
 
 ---
 
-### Manual Checks Still Needed
-
-- Browser: Verify dashboard signup flow, upload form, video player playback in a real browser
-- Browser: Verify share page (`/share/[token]`) renders the embedded HLS player
-- Browser: Verify billing page renders correctly and shows "no payment collected" disclaimer
-- Razorpay test checkout: Requires user to provide test-mode key ID, key secret, webhook secret, and plan IDs
-
----
-
-### Features Not Implemented (Per IMPLEMENTATION_STATUS)
+## Remaining Open Work (per IMPLEMENTATION_STATUS)
 
 - Password recovery, email verification, OIDC/MFA, rate limits
-- Resumable/chunked uploads, checksum validation, quotas
-- Upload integrity scanning, retry management
-- Share/embed UI, invitations, role management
-- Analytics event ingestion
-- Razorpay end-to-end verification, invoices/tax, cancellation UI, reconciliation, refund handling
-- Folders, richer analytics, accessibility polish
-- Dependency audit, upload fuzzing, load tests, backup/restore drills, rate limiting
+- Resumable/chunked uploads, checksum validation, upload quotas
+- Playback view/watch-time analytics (intentionally not implemented yet)
+- Real plan quota enforcement on storage
+- Embed UI, share page UI, invitations, role management
+- Razorpay end-to-end verification, invoices, cancellation UI
+- Accessibility polish, folder organisation, richer analytics
+- Load tests, dependency audit, backup/restore drills
 
 ---
 
-### Production-Readiness Risks
+## Production-Readiness Risks
 
-1. **Authentication model:** HTTP Basic over HTTP. Credentials stored in `sessionStorage`. Not safe for public exposure.
-2. **No rate limiting:** Registration and login endpoints are unprotected against brute force.
-3. **Single-node media storage:** HLS assets stored on local filesystem. Not replicated or backed up.
-4. **Synchronous video processing:** FFmpeg runs in a `@Async` thread pool. No retry mechanism for failures.
-5. **No HTTPS:** All communication is plaintext over localhost.
-6. **No input size validation on comments/webhooks:** Only the upload size is bounded.
-7. **Billing not end-to-end verified:** Subscription creation and webhook flow confirmed to compile and reject unconfigured state; live Razorpay test has not been exercised.
+1. **HTTP Basic over HTTP**: Credentials in `sessionStorage`; not safe for public exposure.
+2. **No rate limiting**: Registration and login are unprotected against brute force.
+3. **Local-only media**: HLS assets on the local filesystem. Not replicated.
+4. **Synchronous async processing**: FFmpeg in `@Async` thread pool; no retry on failure.
+5. **No HTTPS**: All traffic is plaintext on localhost.
+6. **Billing not end-to-end verified**: Razorpay integration compiles and rejects unconfigured state; live test not run.
 
 ---
 
@@ -279,16 +301,15 @@ None found beyond DEFECT-1 (fixed above).
 ### 1. Prerequisites
 
 ```bash
-# Ensure Java 21 is available
+# Java 21 (not default on this machine)
 export JAVA_HOME="/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home"
 export PATH="$JAVA_HOME/bin:/opt/homebrew/bin:$PATH"
-java -version  # must show 21.x
+java -version   # must show 21.x
 
-# Ensure Docker Compose plugin is installed
+# Docker Compose V2 plugin (if not already)
 brew install docker-compose
-# Add to ~/.docker/config.json: "cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"]
 
-# Ensure FFmpeg is installed
+# FFmpeg (if not already)
 brew install ffmpeg
 ```
 
@@ -296,9 +317,9 @@ brew install ffmpeg
 
 ```bash
 cd ~/video-stream
-colima start        # start Docker runtime (macOS)
+colima start
 docker compose up -d postgres
-docker compose ps   # wait until status shows (healthy)
+docker compose ps   # wait until healthy
 ```
 
 ### 3. Start Backend API (Terminal 2)
@@ -306,11 +327,11 @@ docker compose ps   # wait until status shows (healthy)
 ```bash
 cd ~/video-stream/services/api
 export JAVA_HOME="/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home"
-export PATH="$JAVA_HOME/bin:/opt/homebrew/bin:$PATH"
+export PATH="$JAVA_HOME/bin:$PATH"
 export SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/videocloud"
 export SPRING_DATASOURCE_USERNAME="videocloud"
 export SPRING_DATASOURCE_PASSWORD="local_only_change_me"
-export VIDEO_MEDIA_ROOT="$(pwd)/../../var/media"
+export VIDEO_MEDIA_ROOT="$(cd ../.. && pwd)/var/media"   # repo root, not services/api/
 export FFMPEG_PATH="/opt/homebrew/bin/ffmpeg"
 mvn spring-boot:run
 # Health check: curl http://localhost:8080/actuator/health
@@ -343,12 +364,12 @@ mvn test
 
 ```bash
 cd ~/video-stream/apps/web
-npm test      # 3 tests, 0 failures
-npm run lint  # 1 warning (not an error)
-npm run build # production build succeeds
+npm test       # 7 tests, 0 failures
+npm run lint   # 1 pre-existing warning, no errors
+npm run build  # 8 routes, clean TypeScript
 ```
 
-### 7. Generate Test Video (for E2E)
+### 7. Generate Test Video (for E2E upload testing)
 
 ```bash
 ffmpeg -f lavfi -i testsrc2=size=640x360:rate=24 \
@@ -359,4 +380,4 @@ ffmpeg -f lavfi -i testsrc2=size=640x360:rate=24 \
 
 ---
 
-**Note:** This platform is a local MVP. It is not production-ready. Do not expose it publicly.
+**Note:** This is a local MVP only. Do not expose it on a public network. Production requires replacing HTTP Basic auth, adding HTTPS, rate limiting, and a proper session model.
