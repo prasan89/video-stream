@@ -8,6 +8,13 @@
 ## Deferred cloud target (documentation only; do not provision)
 Future versions may evaluate Cloud Run, Cloud SQL, Cloud Storage, Transcoder API, Cloud Tasks/Pub/Sub, Secret Manager, monitoring and CDN after the local MVP works and costs are validated.
 
+## Local multi-tenant isolation
+- `CurrentWorkspace` resolves the active tenant from authenticated workspace membership. When an account belongs to multiple workspaces, clients select one with `X-Workspace-Id`; the API verifies membership before accepting it.
+- Video rows, quota checks, reserved upload bytes, usage, analytics and billing subscriptions are scoped by `workspace_id`.
+- New local media is stored under `var/media/workspaces/{workspaceId}/videos/{videoId}` and resumable chunks under `var/media/workspaces/{workspaceId}/uploads/{uploadId}`. Share/public playback resolves the stored object key instead of guessing a path from the video ID.
+- Legacy media keys remain readable. A verified local migration to move existing files into workspace directories remains a follow-up; do not move files by assumption.
+- Workspace IDs are not authorization by themselves: every requested workspace must be backed by a membership row for the authenticated account.
+
 ## Data flow: future video upload
 1. Client asks API to create a video and upload session.
 2. API verifies workspace role, plan quota, file size and content-type allowlist.
