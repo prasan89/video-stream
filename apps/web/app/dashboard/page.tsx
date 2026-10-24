@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import VideoPlayer from "./VideoPlayer";
 
 type Video = {
-  id: string; title: string; description: string | null; visibility: string;
+  id: string; title: string; description: string | null; visibility: string; folderName: string | null;
   status: string; durationSeconds: number | null; createdAt: string;
 };
 type Workspace = { id: string; name: string; slug: string; role: string };
@@ -42,7 +42,7 @@ export default function DashboardPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("newest");
+  const [sort, setSort] = useState("newest");\n  const [folderFilter, setFolderFilter] = useState("all");
   const [view, setView] = useState<"library" | "analytics">("library");
   const [shareLinks, setShareLinks] = useState<Record<string, string>>({});
 
@@ -234,11 +234,18 @@ export default function DashboardPage() {
     finally { setBusy(false); }
   }
 
-  async function changeVisibility(video: Video, visibility: string) {
+  async function updateVideo(video: Video, updates: { visibility?: string; folderName?: string | null }) {
     try {
-      const response = await fetch(`${API}/videos/${video.id}`, { method: "PATCH", headers: headers(true), body: JSON.stringify({ title: video.title, description: video.description || "", visibility }) });
-      if (!response.ok) throw new Error(`Could not update visibility (HTTP ${response.status}).`);
-      await load();
+      const response = await fetch(`${API}/videos/${video.id}`, {
+        method: "PATCH", headers: headers(true),
+        body: JSON.stringify({
+          title: video.title, description: video.description || "",
+          visibility: updates.visibility ?? video.visibility,
+          folderName: updates.folderName === undefined ? video.folderName : updates.folderName
+        })
+      });
+      if (!response.ok) throw new Error(`Could not update video (HTTP ${response.status}).`);
+      setMessage("Video updated."); setMessageError(false); await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not update video."); setMessageError(true); }
   }
 
@@ -264,8 +271,8 @@ export default function DashboardPage() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "Share link failed."); setMessageError(true); }
   }
 
-  const filteredVideos = useMemo(() => videos.filter(video => video.title.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => sort === "title" ? a.title.localeCompare(b.title) : sort === "oldest" ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt)), [videos, search, sort]);
+  const folders = useMemo(() => Array.from(new Set(videos.map(video => video.folderName).filter((folder): folder is string => Boolean(folder)))).sort((a,b) => a.localeCompare(b)), [videos]);\n  const filteredVideos = useMemo(() => videos.filter(video => video.title.toLowerCase().includes(search.toLowerCase()) && (folderFilter === "all" || (folderFilter === "__uncategorized__" ? !video.folderName : video.folderName === folderFilter)))
+    .sort((a, b) => sort === "title" ? a.title.localeCompare(b.title) : sort === "oldest" ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt)), [videos, search, sort, folderFilter]);
   const storedBytes = usage?.storedBytes ?? 0;
   const storageLimit = 2 * 1024 ** 3;
   const effectiveLimit = usage?.storageLimitBytes ?? storageLimit;
@@ -370,14 +377,14 @@ export default function DashboardPage() {
           <div className="vc-analytics-panel"><h2>Top videos</h2>{analytics.videos.length === 0 ? <p>No videos in this workspace yet.</p> : <div className="vc-analytics-table"><div className="vc-analytics-row header"><span>Video</span><span>Starts</span><span>Unique sessions</span><span>Watch time</span></div>{analytics.videos.map(video => <div className="vc-analytics-row" key={video.id}><span>{video.title}</span><span>{video.plays}</span><span>{video.unique_viewers}</span><span>{Math.floor(video.watch_seconds/60)} min</span></div>)}</div>}</div>
           <p className="vc-analytics-note">{analytics.note}</p></>}
         </section> : <section className="vc-section">
-          <div className="vc-section-heading"><div><p className="eyebrow">YOUR CONTENT</p><h1>Video library</h1><p className="vc-subtitle">Manage, preview and share videos from your workspace.</p></div><div className="vc-library-controls"><select aria-label="Sort videos" value={sort} onChange={event => setSort(event.target.value)}><option value="newest">Recently added</option><option value="oldest">Oldest first</option><option value="title">Title A–Z</option></select><button className="vc-secondary" onClick={() => void load()}>↻ Refresh</button></div></div>
+          <div className="vc-section-heading"><div><p className="eyebrow">YOUR CONTENT</p><h1>Video library</h1><p className="vc-subtitle">Manage, preview and share videos from your workspace.</p></div><div className="vc-library-controls"><select aria-label="Filter by folder" value={folderFilter} onChange={event => setFolderFilter(event.target.value)}><option value="all">All folders</option><option value="__uncategorized__">Uncategorized</option>{folders.map(folder => <option key={folder} value={folder}>{folder}</option>)}</select><select aria-label="Sort videos" value={sort} onChange={event => setSort(event.target.value)}><option value="newest">Recently added</option><option value="oldest">Oldest first</option><option value="title">Title A–Z</option></select><button className="vc-secondary" onClick={() => void load()}>↻ Refresh</button></div></div>
           <div className="vc-library-summary"><span>{filteredVideos.length} {filteredVideos.length === 1 ? "video" : "videos"}</span><span>{formatBytes(storedBytes)} stored</span></div>
           {filteredVideos.length === 0 ? <div className="vc-empty-state"><div className="vc-empty-icon">⇧</div><h2>{search ? "No matching videos" : "Your video library starts here"}</h2><p>{search ? "Try another search term." : "Upload your first video to start building a branded, shareable library."}</p>{!search && <button className="vc-primary" onClick={() => setShowUpload(true)}>＋ Upload your first video</button>}</div> :
             <div className="vc-video-grid">{filteredVideos.map(video => <article className="vc-video-card" key={video.id}>
               <div className="vc-video-preview">{video.status === "READY" ? <VideoPlayer videoId={video.id} auth={auth} workspaceId={workspaceId} /> : <div className="vc-processing"><span>{video.status === "FAILED" ? "!" : "◷"}</span><strong>{video.status === "FAILED" ? "Processing failed" : "Preparing your video"}</strong><small>{video.status}</small></div>}</div>
               <div className="vc-video-details"><div className="vc-video-title-row"><h2 title={video.title}>{video.title}</h2><span className={video.status === "READY" ? "vc-status ready" : video.status === "FAILED" ? "vc-status failed" : "vc-status"}>{video.status}</span></div>
                 <p className="vc-video-meta">{new Date(video.createdAt).toLocaleDateString()} · {video.visibility}</p>
-                <div className="vc-video-actions"><label className="vc-visibility-label" htmlFor={`visibility-${video.id}`}>Access</label><select id={`visibility-${video.id}`} value={video.visibility} onChange={event => void changeVisibility(video, event.target.value)}><option>PRIVATE</option><option>UNLISTED</option><option>PUBLIC</option></select><button className="vc-icon-button" title="Create share link" onClick={() => void createShare(video)}>↗ Share</button><button className="vc-icon-button danger" title="Delete video" onClick={() => void remove(video)}>⌫</button></div>
+                <div className="vc-video-actions"><label className="vc-visibility-label" htmlFor={`visibility-${video.id}`}>Access</label><select id={`visibility-${video.id}`} value={video.visibility} onChange={event => void updateVideo(video, { visibility: event.target.value })}><option>PRIVATE</option><option>UNLISTED</option><option>PUBLIC</option></select><label className="vc-visibility-label" htmlFor={`folder-${video.id}`}>Folder</label><select id={`folder-${video.id}`} aria-label={`Folder for ${video.title}`} value={video.folderName || ""} onChange={event => { const value = event.target.value; if (value === "__new__") { const name = window.prompt("Enter a folder name (max 80 characters):"); if (name?.trim()) void updateVideo(video, { folderName: name.trim() }); } else void updateVideo(video, { folderName: value || null }); }}><option value="">Uncategorized</option>{folders.map(folder => <option key={folder} value={folder}>{folder}</option>)}<option value="__new__">+ New folder…</option></select><button className="vc-icon-button" title="Create share link" onClick={() => void createShare(video)}>↗ Share</button><button className="vc-icon-button danger" title="Delete video" onClick={() => void remove(video)}>⌫</button></div>
                 {shareLinks[video.id] && <div className="vc-share-url"><input aria-label="Share URL" readOnly value={shareLinks[video.id]} onFocus={event => event.currentTarget.select()} /><button onClick={() => void navigator.clipboard?.writeText(shareLinks[video.id])}>Copy</button><Link href={shareLinks[video.id]}>Open</Link></div>}
               </div>
             </article>)}</div>}
