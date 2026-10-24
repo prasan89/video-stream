@@ -60,6 +60,7 @@ public class ResumableUploadController {
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,"Unsupported video content type");
         String ext=extension(request.filename());
         UUID workspaceId=workspaces.id(auth), userId=workspaces.userId(auth);
+        workspaces.requireEditor(auth, workspaceId);
         quotas.assertCanStartUpload(workspaceId,request.sizeBytes());
         UUID videoId=UUID.randomUUID(), uploadId=UUID.randomUUID();
         Path sessionDir=sessionDir(workspaceId,uploadId);
@@ -82,6 +83,7 @@ public class ResumableUploadController {
                                       @RequestHeader("X-Chunk-SHA256") String suppliedSha,
                                       @RequestBody byte[] bytes, Authentication auth) throws IOException {
         UUID workspaceId=workspaces.id(auth);
+        workspaces.requireEditor(auth, workspaceId);
         Map<String,Object> session=session(uploadId,workspaceId,true);
         long expected=((Number)session.get("expected_size_bytes")).longValue();
         int count=(int)((expected+CHUNK_BYTES-1)/CHUNK_BYTES);
@@ -113,6 +115,7 @@ public class ResumableUploadController {
     @Transactional
     public Map<String,Object> complete(@PathVariable UUID uploadId, Authentication auth) throws IOException {
         UUID workspaceId=workspaces.id(auth);
+        workspaces.requireEditor(auth, workspaceId);
         Map<String,Object> s=session(uploadId,workspaceId,true);
         UUID videoId=(UUID)s.get("video_id");
         long expected=((Number)s.get("expected_size_bytes")).longValue();
@@ -162,7 +165,9 @@ public class ResumableUploadController {
     @PostMapping("/{uploadId}/retry-processing")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public Map<String,Object> retryProcessing(@PathVariable UUID uploadId,Authentication auth) {
-        Map<String,Object> s=session(uploadId,workspaces.id(auth),false);
+        UUID workspaceId = workspaces.id(auth);
+        workspaces.requireEditor(auth, workspaceId);
+        Map<String,Object> s=session(uploadId,workspaceId,false);
         UUID videoId=(UUID)s.get("video_id");
         List<Map<String,Object>> videos=jdbc.queryForList("SELECT source_object_key,status FROM videos WHERE id=? AND workspace_id=? AND deleted_at IS NULL",videoId,workspaces.id(auth));
         if(videos.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Video not found");
