@@ -23,7 +23,7 @@ management:
       probes:
         enabled: true
 videocloud:
-  media-root: ${VIDEO_MEDIA_ROOT:./var/media}
+  media-root: ${VIDEO_MEDIA_ROOT:../../var/media}
   ffmpeg-path: ${FFMPEG_PATH:ffmpeg}
   max-upload-bytes: ${MAX_UPLOAD_BYTES:2147483648}
   processing-threads: ${PROCESSING_THREADS:4}
