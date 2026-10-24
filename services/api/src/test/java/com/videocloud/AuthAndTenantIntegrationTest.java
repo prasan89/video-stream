@@ -26,6 +26,22 @@ class AuthAndTenantIntegrationTest {
   mvc.perform(get("/api/v1/videos").with(httpBasic(emailA,password))).andExpect(status().isOk()).andExpect(jsonPath("$[0].title").value("Secret video"));
   mvc.perform(get("/api/v1/usage")).andExpect(status().isUnauthorized());
  }
+ @Test void viewerCanReadButCannotMutateWorkspaceVideo()throws Exception{
+  String suffix=UUID.randomUUID().toString().substring(0,8),password="Local-only-pass-123",email="viewer-"+suffix+"@example.test";
+  register(email,password,"Viewer Studio");
+  UUID user=jdbc.queryForObject("SELECT id FROM users WHERE email=?",UUID.class,email);
+  UUID workspace=jdbc.queryForObject("SELECT id FROM workspaces WHERE owner_user_id=?",UUID.class,user);
+  UUID video=UUID.randomUUID();
+  jdbc.update("INSERT INTO videos(id,workspace_id,title,visibility,status,created_by) VALUES (?, ?, ?,'PRIVATE','CREATED',?)",video,workspace,"Read only",user);
+  jdbc.update("UPDATE workspace_members SET role='VIEWER' WHERE workspace_id=? AND user_id=?",workspace,user);
+  mvc.perform(get("/api/v1/videos").with(httpBasic(email,password)))
+    .andExpect(status().isOk()).andExpect(jsonPath("$[0].title").value("Read only"));
+  mvc.perform(patch("/api/v1/videos/"+video).with(httpBasic(email,password))
+    .header("X-Workspace-Id",workspace.toString()).contentType(MediaType.APPLICATION_JSON)
+    .content(mapper.writeValueAsBytes(Map.of("title","Changed","description","","visibility","PRIVATE"))))
+    .andExpect(status().isForbidden());
+ }
+
  private void register(String email,String password,String workspace)throws Exception{
   var body=Map.of("email",email,"password",password,"displayName","Local Test","workspaceName",workspace);
   mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsBytes(body))).andExpect(status().isCreated());
