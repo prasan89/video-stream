@@ -141,6 +141,14 @@ public class ResumableUploadController {
         if(expectedSha!=null&&!expectedSha.isBlank()&&!digest.equalsIgnoreCase(expectedSha.trim())){
             Files.deleteIfExists(temp);throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Full-file checksum mismatch; upload remains resumable");
         }
+        String filename=assembled.getFileName().toString();
+        String ext=filename.substring(filename.lastIndexOf('.')+1).toLowerCase(Locale.ROOT);
+        try {
+            VideoFileValidator.validate(temp, ext, (String)s.get("content_type"));
+        } catch (IOException | RuntimeException e) {
+            Files.deleteIfExists(temp);
+            throw e;
+        }
         try{Files.move(temp,assembled,StandardCopyOption.ATOMIC_MOVE);}
         catch(AtomicMoveNotSupportedException e){Files.move(temp,assembled);}
         jdbc.update("INSERT INTO video_assets(video_id,asset_type,object_key,mime_type,size_bytes) VALUES (?,'ORIGINAL',?,?,?)",
