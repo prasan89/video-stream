@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import VideoPlayer from "./VideoPlayer";
 
 type Video = {
-  id: string; title: string; description: string | null; visibility: string;
+  id: string; title: string; description: string | null; visibility: string; folderName: string | null;
   status: string; durationSeconds: number | null; createdAt: string;
 };
 type Workspace = { id: string; name: string; slug: string; role: string };
@@ -234,11 +234,18 @@ export default function DashboardPage() {
     finally { setBusy(false); }
   }
 
-  async function changeVisibility(video: Video, visibility: string) {
+  async function updateVideo(video: Video, updates: { visibility?: string; folderName?: string | null }) {
     try {
-      const response = await fetch(`${API}/videos/${video.id}`, { method: "PATCH", headers: headers(true), body: JSON.stringify({ title: video.title, description: video.description || "", visibility }) });
-      if (!response.ok) throw new Error(`Could not update visibility (HTTP ${response.status}).`);
-      await load();
+      const response = await fetch(`${API}/videos/${video.id}`, {
+        method: "PATCH", headers: headers(true),
+        body: JSON.stringify({
+          title: video.title, description: video.description || "",
+          visibility: updates.visibility ?? video.visibility,
+          folderName: updates.folderName === undefined ? video.folderName : updates.folderName
+        })
+      });
+      if (!response.ok) throw new Error(`Could not update video (HTTP ${response.status}).`);
+      setMessage("Video updated."); setMessageError(false); await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not update video."); setMessageError(true); }
   }
 
