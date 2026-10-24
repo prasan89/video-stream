@@ -73,6 +73,14 @@
 This is a local MVP, not a production-ready hosted video service. The dashboard stores Basic credentials in sessionStorage. Do not expose it publicly; production must replace this with a reviewed OIDC/session design.
 
 
+## Phase 3 — upload integrity and reliability (in progress)
+- [x] Validate extension/MIME agreement and container signatures before queuing standard uploads for processing.
+- [x] Validate the assembled resumable file after chunk/full-file checksum verification and before finalizing it.
+- [x] Unit tests cover valid MP4/WebM signatures, MIME mismatch, spoofed signatures and undersized files.
+- [ ] Add PostgreSQL-backed concurrent quota reservation tests and browser-driven interruption/resume tests.
+- [ ] Add malware scanning or sandboxed media inspection before public sharing; the current signature check is not a malware scanner.
+- [ ] Verify the full workflow locally with real MP4, MOV, WebM and MKV fixtures and FFmpeg.
+
 ## Storage abstraction and legacy-media migration milestone
 - [x] Introduced a `MediaStorage` contract and safe local-disk implementation with root-confined object keys.
 - [x] Verified, retry-safe copy primitive uses SHA-256 and retains source files.
