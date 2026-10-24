@@ -56,6 +56,23 @@ public class CurrentWorkspace {
         return memberships.get(0);
     }
 
+    /** Only workspace owners, admins, and editors may mutate workspace media. */
+    public void requireEditor(Authentication authentication, UUID workspaceId) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        List<String> roles = jdbc.query(
+            "SELECT m.role FROM workspace_members m JOIN users u ON u.id=m.user_id " +
+            "WHERE m.workspace_id=? AND lower(u.email)=lower(?)",
+            (rs, row) -> rs.getString(1), workspaceId, authentication.getName());
+        if (roles.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found");
+        }
+        if (!List.of("OWNER", "ADMIN", "EDITOR").contains(roles.get(0))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Workspace editor permission required");
+        }
+    }
+
     public UUID userId(Authentication authentication) {
         return jdbc.queryForObject("SELECT id FROM users WHERE lower(email)=lower(?)",
             UUID.class, authentication.getName());
