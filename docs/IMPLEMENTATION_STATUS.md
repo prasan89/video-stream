@@ -71,3 +71,14 @@
 - [ ] Dependency audit, upload fuzzing, load tests, backup/restore drills, rate limiting and security review
 
 This is a local MVP, not a production-ready hosted video service. The dashboard stores Basic credentials in sessionStorage. Do not expose it publicly; production must replace this with a reviewed OIDC/session design.
+
+
+## Storage abstraction and legacy-media migration milestone
+- [x] Introduced a `MediaStorage` contract and safe local-disk implementation with root-confined object keys.
+- [x] Verified, retry-safe copy primitive uses SHA-256 and retains source files.
+- [x] Video processing registers generated assets through the storage abstraction.
+- [x] Added an opt-in legacy-media migration service and startup runner; dry-run is the default and migration is disabled unless explicitly enabled.
+- [x] Added unit tests for path traversal rejection and verified copy retry behavior.
+- [ ] Migrate all remaining controllers and cleanup jobs to the storage abstraction.
+- [ ] Run the legacy migration in dry-run mode on a representative local database and review every reported object.
+- [ ] Run migration mode only after a backup and dry-run sign-off; verify playback and storage usage before manually cleaning legacy files.

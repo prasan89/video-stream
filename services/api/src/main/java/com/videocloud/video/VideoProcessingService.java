@@ -17,14 +17,14 @@ import java.util.stream.Stream;
 public class VideoProcessingService {
     private final JdbcTemplate jdbc;
     private final String ffmpeg;
-    private final Path mediaRoot;
+    private final MediaStorage storage;
 
     public VideoProcessingService(JdbcTemplate jdbc,
                                   @Value("${videocloud.ffmpeg-path:ffmpeg}") String ffmpeg,
-                                  @Value("${videocloud.media-root:./var/media}") String mediaRoot) {
+                                  MediaStorage storage) {
         this.jdbc = jdbc;
         this.ffmpeg = ffmpeg;
-        this.mediaRoot = Path.of(mediaRoot).toAbsolutePath().normalize();
+        this.storage = storage;
     }
 
     @Async
@@ -59,7 +59,7 @@ public class VideoProcessingService {
      */
     private void registerGeneratedAssets(UUID videoId, Path source, Path dir) throws IOException {
         Path normalizedDir = dir.toAbsolutePath().normalize();
-        if (!normalizedDir.startsWith(mediaRoot) || !source.toAbsolutePath().normalize().startsWith(normalizedDir))
+        if (!normalizedDir.startsWith(storage.root()) || !source.toAbsolutePath().normalize().startsWith(normalizedDir))
             throw new IllegalStateException("Generated assets are outside the configured media root");
 
         try (Stream<Path> paths = Files.walk(normalizedDir)) {
@@ -80,11 +80,11 @@ public class VideoProcessingService {
                 } else {
                     continue;
                 }
-                String key = mediaRoot.relativize(file.toAbsolutePath().normalize()).toString();
+                String key = storage.keyFor(file);
                 jdbc.update("INSERT INTO video_assets(video_id,asset_type,object_key,mime_type,size_bytes) " +
                     "VALUES (?,?,?,?,?) ON CONFLICT (video_id,asset_type,object_key) DO UPDATE " +
                     "SET mime_type=EXCLUDED.mime_type,size_bytes=EXCLUDED.size_bytes",
-                    videoId, type, key, mime, Files.size(file));
+                    videoId, type, key, mime, storage.size(file));
             }
         }
     }
