@@ -177,7 +177,7 @@ public class ResumableUploadController {
         workspaces.requireEditor(auth, workspaceId);
         Map<String,Object> s=session(uploadId,workspaceId,false);
         UUID videoId=(UUID)s.get("video_id");
-        List<Map<String,Object>> videos=jdbc.queryForList("SELECT source_object_key,status FROM videos WHERE id=? AND workspace_id=? AND deleted_at IS NULL",videoId,workspaces.id(auth));
+        List<Map<String,Object>> videos=jdbc.queryForList("SELECT source_object_key,status FROM videos WHERE id=? AND workspace_id=? AND deleted_at IS NULL",videoId,workspaceId);
         if(videos.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Video not found");
         if(!"FAILED".equals(videos.get(0).get("status")))throw new ResponseStatusException(HttpStatus.CONFLICT,"Only failed videos can be retried");
         Path source=root.resolve((String)videos.get(0).get("source_object_key")).normalize();

@@ -13,6 +13,8 @@
 - [x] Database-backed HTTP Basic authentication for the local API
 - [x] Workspace-derived authorization for video operations
 - [x] Integration test for cross-workspace video isolation
+- [x] RBAC role enforcement: VIEWER is read-only; EDITOR can upload/edit but not delete; ADMIN and OWNER can delete; all roles checked on every mutating endpoint via CurrentWorkspace.assertAtLeast()
+- [x] RbacEnforcementTest covers VIEWER deny (delete/patch), EDITOR allow (patch) / deny (delete), and ADMIN allow (delete)
 - [ ] Password recovery, email verification, OIDC/MFA, rate limits and production session model
 
 ## Phase 3 — upload
@@ -28,6 +30,7 @@
 - [x] Startup recovery requeues videos left in PROCESSING when the original file is present; failed videos can be manually retried
 - [x] Scheduled cleanup marks expired upload sessions EXPIRED, releases placeholder video slots, and removes local temporary chunk directories
 - [x] Dashboard persists pending upload metadata and resumes missing chunks after refresh when the same file is reselected
+- [x] Bounded async executor (ThreadPoolTaskExecutor, default 4 threads, queue 20) for VideoProcessingService; configurable via PROCESSING_THREADS and PROCESSING_QUEUE env vars
 - [ ] End-to-end backend tests for concurrent quota reservations and browser-driven large-file interruption tests
 - [ ] Migrate existing legacy media files into tenant-specific directories with a one-time verified local migration (existing legacy object keys remain readable)
 
@@ -46,6 +49,7 @@
 - [x] Authenticated owner-only HLS asset endpoint
 - [x] hls.js playback component for browsers supporting Media Source Extensions
 - [x] Explicit public video and HLS asset endpoints
+- [x] duration_seconds populated via ffprobe after HLS transcode succeeds; VideoDto exposes it
 - [ ] Upload integrity scanning, retry management and cross-browser playback tests
 
 ## Phase 5 — creator dashboard
