@@ -31,6 +31,16 @@
 - [ ] End-to-end backend tests for concurrent quota reservations and browser-driven large-file interruption tests
 - [ ] Migrate existing legacy media files into tenant-specific directories with a one-time verified local migration (existing legacy object keys remain readable)
 
+## Phase 4 — playback and processing reliability (in progress)
+- [x] Run FFmpeg with bounded execution time and discard subprocess output streams to avoid blocked pipes.
+- [x] Terminate timed-out media processes and report non-zero exits as processing failures.
+- [x] Validate non-empty thumbnail, VOD HLS manifest, and at least one non-empty segment before marking a video READY.
+- [x] Remove stale/partial generated outputs before retries and clear generated-asset registrations on processing failure.
+- [x] Add process-runner tests for exit codes and timeout behavior.
+- [ ] Run end-to-end FFmpeg tests with real synthetic media and verify HLS playback in Chromium, Firefox, Safari/iOS, and native HLS clients.
+- [ ] Add a durable processing queue and bounded worker pool; current @Async execution is not a persistent job queue.
+- [ ] Add playback range-request/seek behavior and verify HLS manifest segment references and MIME/cache behavior across browsers.
+
 ## Phase 4 — playback
 - [x] Async FFmpeg thumbnail and HLS generation
 - [x] Authenticated owner-only HLS asset endpoint
