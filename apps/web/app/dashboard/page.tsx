@@ -42,7 +42,8 @@ export default function DashboardPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showUpload, setShowUpload] = useState(false);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("newest");\n  const [folderFilter, setFolderFilter] = useState("all");
+  const [sort, setSort] = useState("newest");
+  const [folderFilter, setFolderFilter] = useState("all");
   const [view, setView] = useState<"library" | "analytics">("library");
   const [shareLinks, setShareLinks] = useState<Record<string, string>>({});
 
@@ -271,7 +272,8 @@ export default function DashboardPage() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "Share link failed."); setMessageError(true); }
   }
 
-  const folders = useMemo(() => Array.from(new Set(videos.map(video => video.folderName).filter((folder): folder is string => Boolean(folder)))).sort((a,b) => a.localeCompare(b)), [videos]);\n  const filteredVideos = useMemo(() => videos.filter(video => video.title.toLowerCase().includes(search.toLowerCase()) && (folderFilter === "all" || (folderFilter === "__uncategorized__" ? !video.folderName : video.folderName === folderFilter)))
+  const folders = useMemo(() => Array.from(new Set(videos.map(video => video.folderName).filter((folder): folder is string => Boolean(folder)))).sort((a,b) => a.localeCompare(b)), [videos]);
+  const filteredVideos = useMemo(() => videos.filter(video => video.title.toLowerCase().includes(search.toLowerCase()) && (folderFilter === "all" || (folderFilter === "__uncategorized__" ? !video.folderName : video.folderName === folderFilter)))
     .sort((a, b) => sort === "title" ? a.title.localeCompare(b.title) : sort === "oldest" ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt)), [videos, search, sort, folderFilter]);
   const storedBytes = usage?.storedBytes ?? 0;
   const storageLimit = 2 * 1024 ** 3;
